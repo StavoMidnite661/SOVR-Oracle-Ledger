@@ -905,7 +905,22 @@
 docs/
 scripts/
 
+# Test and config files (not needed in repo)
+testplan.md
+usdSOVR_base.json
+vendor_test.json
+hardhat.config.cjs
+.mcp.json
+
+# Smart contract flattened files
+ConsulCreditsWrapper_Flat.sol
+
 # Log files
 *.log
 logs/
+
+# Debug/temp files
+payment_cd
+test-db-connection.js
+update_docs.js
 
