@@ -924,3 +924,6 @@ payment_cd
 test-db-connection.js
 update_docs.js
 
+# Task files
+task.md
+
