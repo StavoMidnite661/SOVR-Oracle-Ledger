@@ -895,3 +895,17 @@
 # uploads/
 # downloads/
 
+# AI Agent folders (not needed in repo)
+.claude/
+.claude-flow/
+.swarm/
+.idx/
+
+# Documentation and scripts (not needed in repo)
+docs/
+scripts/
+
+# Log files
+*.log
+logs/
+
