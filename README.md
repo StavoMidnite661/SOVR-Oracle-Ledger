@@ -1,5 +1,7 @@
 # 🏛️ Oracle Ledger - Enterprise Financial Management System
 
+![Oracle Ledger Console](attached_assets/oracleLedger1.PNG)
+
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge&logo=statuspage" alt="Status">
   <img src="https://img.shields.io/badge/Type-Microservices-blue?style=for-the-badge&logo=docker" alt="Type">
