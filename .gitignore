@@ -605,9 +605,9 @@
 # DEVOPS & CONTAINERS
 # ==============================================================================
 # Docker
-**/Dockerfile*
-**/.dockerignore
-**/docker-compose*.yml
+# **/Dockerfile*
+# **/.dockerignore
+# **/docker-compose*.yml
 **/.docker/
 
 # Kubernetes
