@@ -14,7 +14,6 @@ interface StripePaymentsViewProps {
 
 type PaymentsTab = 'overview' | 'ach-payments' | 'direct-deposits' | 'customers' | 'activity';
 
-import { mockStripeCustomers, mockAchPayments, mockDirectDepositPayouts } from '../constants.js';
 import { 
   CreditCard, 
   ArrowRightLeft, 
@@ -34,9 +33,9 @@ const ActivityIcon = () => <Activity />;
 const AlertCircleIcon = () => <AlertCircle />;
 
 export const StripePaymentsView: React.FC<StripePaymentsViewProps> = ({
-  customers = mockStripeCustomers,
-  achPayments = mockAchPayments,
-  directDepositPayouts = mockDirectDepositPayouts,
+  customers = [],
+  achPayments = [],
+  directDepositPayouts = [],
   onCreateCustomer,
   onCreateAchPayment,
   onCreateDirectDepositPayout,

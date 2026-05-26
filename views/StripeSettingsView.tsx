@@ -25,10 +25,10 @@ interface StripeSettingsViewProps {
 
 type SettingsTab = 'api-keys' | 'webhooks' | 'payment-methods' | 'compliance' | 'billing' | 'testing';
 
-import { mockStripeCustomers } from '../constants.js';
+// Removed mock import
 
 export const StripeSettingsView: React.FC<StripeSettingsViewProps> = ({
-  customers = mockStripeCustomers,
+  customers = [],
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('api-keys');
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -97,23 +97,16 @@ export const StripeSettingsView: React.FC<StripeSettingsViewProps> = ({
   // Mock settings data
   const [settings, setSettings] = useState({
     apiKeys: {
-      publishableKey: 'pk_test_51234567890',
-      secretKey: 'sk_test_51234567890',
-      webhookSigningSecret: 'whsec_1234567890',
+      publishableKey: 'LIVE_PENDING',
+      secretKey: 'LIVE_PENDING',
+      webhookSigningSecret: 'LIVE_PENDING',
     },
-    webhooks: [
-      {
-        id: '1',
-        url: 'https://api.oracle-ledger.com/webhooks/stripe',
-        enabled: true,
-        events: ['payment_intent.succeeded', 'charge.succeeded', 'payout.paid'],
-      },
-    ],
+    webhooks: [],
     paymentMethods: {
       achEnabled: true,
       directDepositEnabled: true,
       internationalPaymentsEnabled: false,
-      maximumAmount: 500000, // $5,000 in cents
+      maximumAmount: 1000000, // $10,000 in cents
     },
     compliance: {
       kycVerificationRequired: true,
@@ -122,10 +115,10 @@ export const StripeSettingsView: React.FC<StripeSettingsViewProps> = ({
       dataRetentionDays: 2555, // 7 years
     },
     billing: {
-      currentPlan: 'Stripe Connect Standard',
-      monthlyVolume: 125000, // $1,250 in cents
-      volumeLimit: 1000000, // $10,000 in cents
-      nextBillingDate: '2024-04-01',
+      currentPlan: 'Production Enterprise',
+      monthlyVolume: 0,
+      volumeLimit: 10000000,
+      nextBillingDate: 'Next Cycle',
     },
   });
 
@@ -229,11 +222,11 @@ export const StripeSettingsView: React.FC<StripeSettingsViewProps> = ({
 
               <div className="space-y-4">
                 <h4 className="text-lg font-semibold text-sov-light">Environment</h4>
-                <div className="bg-sov-dark p-4 rounded-lg border border-gray-600">
-                  <span className="bg-sov-yellow/20 text-sov-yellow px-2 py-1 rounded-full text-sm font-semibold">
-                    TEST MODE
+                <div className="bg-sov-green/20 p-4 rounded-lg border border-sov-green/30">
+                  <span className="bg-sov-green/20 text-sov-green px-2 py-1 rounded-full text-sm font-semibold">
+                    LIVE PRODUCTION
                   </span>
-                  <p className="text-sov-light-alt text-sm mt-2">All transactions are in test mode</p>
+                  <p className="text-sov-light-alt text-sm mt-2">All transactions are on the live network</p>
                 </div>
               </div>
             </div>

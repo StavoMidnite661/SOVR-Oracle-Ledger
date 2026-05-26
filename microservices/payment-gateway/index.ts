@@ -6,12 +6,18 @@ import { eq, desc, and, or, like, isNull, gte, lte, sql } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { AchReturnCodes } from '../../types.js';
 import { iso20022Service } from '../../services/iso20022Service.js';
+import { achPaymentService } from '../../services/achPaymentService.js';
+import { directDepositService } from '../../services/directDepositService.js';
 
 const app = express();
 const PORT = process.env.PAYMENT_GATEWAY_PORT || 3005;
 
 // Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy_key', {
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+if (!stripeKey) {
+  console.warn('⚠️ STRIPE_SECRET_KEY is not set. Payment gateway will fail on live transactions.');
+}
+const stripe = new Stripe(stripeKey || '', {
   apiVersion: '2024-06-20',
 });
 
@@ -144,43 +150,6 @@ function convertDbAchPayment(p: any) { return { ...p, amountCents: parseNumeric(
 
 // --- API Routes ---
 
-// Configuration (In-Memory for Demo)
-let runtimeConfig = {
-  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
-  secretKey: process.env.STRIPE_SECRET_KEY || '',
-  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
-};
-
-app.post('/api/stripe/config', async (req, res) => {
-  const { publishableKey, secretKey, webhookSecret } = req.body;
-
-  if (publishableKey && !publishableKey.startsWith('pk_')) {
-    return res.status(400).json({ error: 'Invalid Publishable Key (must start with pk_)' });
-  }
-  if (secretKey && !secretKey.startsWith('sk_')) {
-    return res.status(400).json({ error: 'Invalid Secret Key (must start with sk_)' });
-  }
-  if (webhookSecret && !webhookSecret.startsWith('whsec_')) {
-    return res.status(400).json({ error: 'Invalid Webhook Secret (must start with whsec_)' });
-  }
-
-  // Update in-memory config
-  if (publishableKey) runtimeConfig.publishableKey = publishableKey;
-  if (secretKey) runtimeConfig.secretKey = secretKey;
-  if (webhookSecret) runtimeConfig.webhookSecret = webhookSecret;
-
-  console.log('🔄 Stripe Configuration Updated:', { 
-    publishableKey: publishableKey ? '***' : undefined, 
-    secretKey: secretKey ? '***' : undefined 
-  });
-
-  // Re-initialize Stripe if secret key changed
-  if (secretKey) {
-    // stripe = new Stripe(secretKey, ...); // In a real app, you'd re-init the singleton
-  }
-
-  res.json({ message: 'Configuration updated successfully' });
-});
 
 // Customers
 app.post('/api/stripe/customers', async (req, res) => {
@@ -453,6 +422,69 @@ app.post('/api/stripe/ach/pay/:invoiceId', async (req, res) => {
     res.json({ success: true, message: 'Vendor payment initiated' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Execute Outbound Payout (Stripe Integration Wired)
+app.post('/api/stripe/payouts/execute', async (req, res) => {
+  try {
+    const { amountCents, currency, recipientId, messageType, purpose, reference, invoiceId } = req.body;
+    
+    console.log(`[Payment] Executing Outbound Payment: ${amountCents} ${currency} to ${recipientId}`);
+
+    let result;
+    const amountDollars = amountCents / 100;
+
+    // Use directDepositService for payroll/standard payouts, ach for ACH credit to vendors.
+    if (messageType === 'ACH') {
+       if (!req.body.paymentMethodId) {
+         return res.status(400).json({ success: false, error: 'paymentMethodId is required for ACH payments' });
+       }
+       result = await achPaymentService.processAchCredit({
+         customerId: recipientId,
+         amount: amountDollars,
+         currency: currency || 'usd',
+         description: purpose || 'ACH Payment',
+         customerType: 'business',
+         paymentMethodId: req.body.paymentMethodId,
+         purpose: 'payment'
+       });
+    } else {
+       // Direct deposit, ISO20022, default
+       // Lookup default bank account for recipient
+       const [bankAccount] = await db.select()
+         .from(schema.directDepositBankAccounts)
+         .where(and(
+           eq(schema.directDepositBankAccounts.recipientId, recipientId),
+           eq(schema.directDepositBankAccounts.isDefault, true)
+         ))
+         .limit(1);
+
+       if (!bankAccount && !req.body.bankAccountId) {
+         return res.status(400).json({ success: false, error: 'No default bank account found and no bankAccountId provided' });
+       }
+
+       result = await directDepositService.processDirectDeposit({
+          recipientId: recipientId,
+          amount: amountDollars,
+          currency: currency || 'usd',
+          description: purpose || 'Standard Payout',
+          payPeriodStart: new Date().toISOString().split('T')[0],
+          payPeriodEnd: new Date().toISOString().split('T')[0],
+          bankAccountId: req.body.bankAccountId || bankAccount.stripeBankAccountId,
+          purpose: purpose === 'salary' ? 'salary' : 'reimbursement'
+       });
+    }
+
+    if (result && result.success) {
+      res.json({ success: true, result });
+    } else {
+      res.status(400).json({ success: false, error: result?.error || 'Payout failed' });
+    }
+
+  } catch (err: any) {
+    console.error('Execute Payout Error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

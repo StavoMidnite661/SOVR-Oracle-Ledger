@@ -29,10 +29,6 @@ export const journalEntries = pgTable('journal_entries', {
   description: text('description').notNull(),
   source: varchar('source', { length: 50 }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('Posted'),
-  // Immutable Audit Trail Fields
-  hash: varchar('hash', { length: 64 }),
-  previousHash: varchar('previous_hash', { length: 64 }),
-  sequenceNumber: serial('sequence_number'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -214,40 +210,40 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
   }),
 }));
 
-export const accountsRelations = relations(accounts, ({ one }) => ({
-  organization: one(organizations, {
-    fields: [accounts.organizationId],
-    references: [organizations.id],
-  }),
-}));
+// export const accountsRelations = relations(accounts, ({ one }) => ({
+//   organization: one(organizations, {
+//     fields: [accounts.organizationId],
+//     references: [organizations.id],
+//   }),
+// }));
 
-export const organizationsRelations = relations(organizations, ({ many }) => ({
-  accounts: many(accounts),
-  securities: many(securities),
-}));
+// export const organizationsRelations = relations(organizations, ({ many }) => ({
+//   accounts: many(accounts),
+//   securities: many(securities),
+// }));
 
-export const investorsRelations = relations(investors, ({ many }) => ({
-  shares: many(shareholders),
-}));
+// export const investorsRelations = relations(investors, ({ many }) => ({
+//   shares: many(shareholders),
+// }));
 
-export const securitiesRelations = relations(securities, ({ one, many }) => ({
-  organization: one(organizations, {
-    fields: [securities.organizationId],
-    references: [organizations.id],
-  }),
-  shareholders: many(shareholders),
-}));
+// export const securitiesRelations = relations(securities, ({ one, many }) => ({
+//   organization: one(organizations, {
+//     fields: [securities.organizationId],
+//     references: [organizations.id],
+//   }),
+//   shareholders: many(shareholders),
+// }));
 
-export const shareholdersRelations = relations(shareholders, ({ one }) => ({
-  investor: one(investors, {
-    fields: [shareholders.investorId],
-    references: [investors.id],
-  }),
-  security: one(securities, {
-    fields: [shareholders.securityId],
-    references: [securities.id],
-  }),
-}));
+// export const shareholdersRelations = relations(shareholders, ({ one }) => ({
+//   investor: one(investors, {
+//     fields: [shareholders.investorId],
+//     references: [investors.id],
+//   }),
+//   security: one(securities, {
+//     fields: [shareholders.securityId],
+//     references: [securities.id],
+//   }),
+// }));
 
 export const companyCardsRelations = relations(companyCards, ({ many }) => ({
   transactions: many(cardTransactions),

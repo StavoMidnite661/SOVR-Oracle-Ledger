@@ -18,8 +18,7 @@ import { StripeReportsView } from './views/StripeReportsView.js';
 import { PayrollView } from './views/PayrollView.js';
 import { SettingsView } from './views/SettingsView.js';
 import { ISO20022View } from './views/ISO20022View.js';
-import { mockConfig, mockSupportedTokens, mockTransactions, mockStats } from './mockData.js';
-import { mockJournalEntries, mockPurchaseOrders, mockInvoices, mockEmployees, mockVendors, mockCompanyCards, mockCardTransactions, mockStripeCustomers, mockAchPayments, mockDirectDepositPayouts, DEFAULT_SETTINGS, CONSUL_CREDITS_CONFIG, mockConsulCreditsConfig } from './constants.js';
+import { CHART_OF_ACCOUNTS, DEFAULT_SETTINGS, CONSUL_CREDITS_CONFIG } from './constants.js';
 import type { JournalEntry, PurchaseOrder, Invoice, Employee, Vendor, CompanyCard, CardTransaction, ConsulCreditsConfig, SupportedToken, ConsulCreditsTransaction, ConsulCreditsStats, StripeCustomer, AchPayment, DirectDepositPayout, AppSettings } from './types.js';
 import { View } from './types.js';
 import { Modal } from './components/shared/Modal.js';
@@ -44,9 +43,9 @@ const App: React.FC = () => {
   const [companyCards, setCompanyCards] = useState<CompanyCard[]>([]);
   const [cardTransactions, setCardTransactions] = useState<CardTransaction[]>([]);
   const [consulCreditsConfig, setConsulCreditsConfig] = useState<ConsulCreditsConfig | null>(CONSUL_CREDITS_CONFIG);
-  const [supportedTokens, setSupportedTokens] = useState<SupportedToken[]>(mockSupportedTokens);
-  const [consulCreditsTransactions, setConsulCreditsTransactions] = useState<ConsulCreditsTransaction[]>(mockTransactions);
-  const [consulCreditsStats, setConsulCreditsStats] = useState<ConsulCreditsStats | null>(mockStats);
+  const [supportedTokens, setSupportedTokens] = useState<SupportedToken[]>([]);
+  const [consulCreditsTransactions, setConsulCreditsTransactions] = useState<ConsulCreditsTransaction[]>([]);
+  const [consulCreditsStats, setConsulCreditsStats] = useState<ConsulCreditsStats | null>(null);
   
   // Stripe Data State
   const [stripeCustomers, setStripeCustomers] = useState<StripeCustomer[]>([]);
@@ -56,7 +55,7 @@ const App: React.FC = () => {
   const [pciAuditLogs, setPciAuditLogs] = useState<any[]>([]);
   const [achReturns, setAchReturns] = useState<any[]>([]);
 
-  const [useMockData, setUseMockData] = useState(false);
+  const useMockData = false; // Hard-enforced Live Mode
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +186,27 @@ const App: React.FC = () => {
     } catch (err) { setError('Failed to pay via ACH'); }
   };
 
+  const onProcessDirectDeposit = async (employeesToPay: Employee[]) => {
+    if (useMockData) return;
+    try {
+      for (const emp of employeesToPay) {
+        if (!emp.bankAccountNumber) continue;
+        const netPay = (emp.annualSalary / 12) * 0.8;
+        await apiService.executePayouts({
+          amountCents: Math.round(netPay * 100),
+          currency: 'usd',
+          recipientId: String(emp.id),
+          messageType: 'DirectDeposit',
+          purpose: 'salary'
+        });
+      }
+      const updatedPayouts = await apiService.getDirectDepositPayouts();
+      setDirectDepositPayouts(updatedPayouts);
+    } catch (err) {
+      setError('Failed to process direct deposit payouts');
+    }
+  };
+
   const addCompanyCard = async (entry: Omit<CompanyCard, 'id' | 'issueDate' | 'spentThisMonth' | 'spentThisQuarter' | 'spentThisYear' | 'lastActivity'>) => {
     if (useMockData) return;
     try {
@@ -284,23 +304,7 @@ const App: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      if (useMockData) {
-        setJournalEntries(mockJournalEntries);
-        setPurchaseOrders(mockPurchaseOrders);
-        setArInvoices(mockInvoices.filter(inv => inv.type === 'AR'));
-        setApInvoices(mockInvoices.filter(inv => inv.type === 'AP'));
-        setEmployees(mockEmployees);
-        setVendors(mockVendors);
-        setCompanyCards(mockCompanyCards);
-        setCardTransactions(mockCardTransactions);
-        setConsulCreditsConfig(mockConfig);
-        setSupportedTokens(mockSupportedTokens);
-        setConsulCreditsTransactions(mockTransactions);
-        setConsulCreditsStats(mockStats);
-        setStripeCustomers(mockStripeCustomers);
-        setAchPayments(mockAchPayments);
-        setDirectDepositPayouts(mockDirectDepositPayouts);
-      } else {
+      {
         try {
           const results = await Promise.allSettled([
             apiService.getJournalEntries(),
@@ -364,7 +368,12 @@ const App: React.FC = () => {
           });
           
           if (configData) {
-            await consulCreditsService.initialize(configData);
+            try {
+              await consulCreditsService.initialize(configData);
+            } catch (initErr) {
+              console.warn("Consul Service Init Failed (Provider Offline or Rate Limited). Crypto features disabled:", initErr);
+              // Do not rethrow, so the rest of the system continues loading normally
+            }
             
             // Try fetching stats
             try {
@@ -417,7 +426,7 @@ const App: React.FC = () => {
       setIsLoading(false);
     };
     loadData();
-  }, [useMockData]);
+  }, []);
 
   // Effect to refresh balances when wallet connects/disconnects
   useEffect(() => {
@@ -501,9 +510,9 @@ const App: React.FC = () => {
              console.error("Critical error in token loading block:", tokenBlockErr);
           }
         } catch (err) {
-          console.error("Critical error in data loading:", err);
-          const message = err instanceof Error ? err.message : String(err);
-          setError(`CORE SYNCHRONIZATION FAILURE: ${message}`);
+          console.error("Consul Credits connectivity error gracefully caught:", err);
+          // Instead of crashing the whole system with setError, we just warn the user.
+          loggingService.log('warn', 'blockchain', 'Provider initialization failed due to rate limits or offline node. Crypto functionality limited.');
         }
       };
       reinit();
@@ -709,7 +718,7 @@ const App: React.FC = () => {
         case View.ConsulCredits:
           return (
             <ConsulCreditsView
-              config={consulCreditsConfig || mockConsulCreditsConfig} // Fallback to mock config
+              config={consulCreditsConfig}
               supportedTokens={supportedTokens}
               transactions={consulCreditsTransactions}
               stats={consulCreditsStats}
@@ -746,12 +755,17 @@ const App: React.FC = () => {
       
       case View.ISO20022: return <ISO20022View achPayments={achPayments} />;
       
-      case View.Payroll: return <PayrollView employees={employees} addEmployee={addEmployee} updateEmployee={updateEmployee} addJournalEntry={addJournalEntry} />;
+      case View.Payroll: return <PayrollView 
+        employees={employees} 
+        addEmployee={addEmployee} 
+        updateEmployee={updateEmployee} 
+        addJournalEntry={addJournalEntry} 
+        directDepositPayouts={directDepositPayouts}
+        onProcessDirectDeposit={onProcessDirectDeposit}
+      />;
       case View.Settings: return <SettingsView 
         settings={settings} 
         setSettings={setSettings} 
-        useMockData={useMockData} 
-        setUseMockData={setUseMockData}
       />;
       default: return <DashboardView 
         journalEntries={journalEntries} 
@@ -782,7 +796,7 @@ const App: React.FC = () => {
         useMockData={useMockData}
         isConsoleOpen={isConsoleOpen}
         onMenuToggle={() => setIsMobileMenuOpen(true)}
-        onToggleMockData={() => setUseMockData(!useMockData)}
+        onToggleMockData={() => {}}
         onToggleConsole={() => setIsConsoleOpen(prev => !prev)}
       />  <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-3 sm:p-6">
           {error && <div className="bg-sov-red/20 text-sov-red p-3 sm:p-4 mb-4 rounded border border-sov-red/30 text-xs sm:text-sm font-bold tracking-tight">{error}</div>}

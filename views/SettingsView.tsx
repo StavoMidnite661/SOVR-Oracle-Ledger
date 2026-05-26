@@ -20,13 +20,11 @@ import {
 interface SettingsViewProps {
   settings: AppSettings;
   setSettings: (settings: AppSettings) => void;
-  useMockData: boolean;
-  setUseMockData: (use: boolean) => void;
 }
 
 type SettingsTab = 'general' | 'connectivity' | 'security' | 'appearance';
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ settings, setSettings, useMockData, setUseMockData }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ settings, setSettings }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [saveMessage, setSaveMessage] = useState('');
@@ -85,20 +83,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, setSetting
             <div className="flex items-center space-x-2 sm:space-x-3">
               <div className="text-right mr-2 sm:mr-4">
                 <p className="text-[10px] font-bold text-sov-light-alt uppercase tracking-[0.2em]">Deployment State</p>
-                <p className={`text-xs font-black uppercase tracking-widest ${useMockData ? 'text-sov-accent' : 'text-sov-green'}`}>
-                  {useMockData ? 'Virtualized (Mock)' : 'Production (Live)'}
+                <p className="text-xs font-black uppercase tracking-widest text-sov-green">
+                  Production (Live)
                 </p>
               </div>
-              <button 
-                onClick={() => setUseMockData(!useMockData)}
-                className={`p-3 rounded-xl border transition-all ${
-                  useMockData 
-                    ? 'bg-sov-accent/10 border-sov-accent/50 text-sov-accent shadow-[0_0_15px_-3px_rgba(34,211,238,0.3)]' 
-                    : 'bg-sov-green/10 border-sov-green/50 text-sov-green'
-                }`}
+              <div 
+                className="p-3 rounded-xl border bg-sov-green/10 border-sov-green/50 text-sov-green"
               >
                 <Activity size={20} />
-              </button>
+              </div>
             </div>
           </div>
         </div>

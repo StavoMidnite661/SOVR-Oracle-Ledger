@@ -1,113 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { FileText, Download, Upload, CheckCircle, AlertCircle, ChevronRight, Copy, Code2, ArrowUpDown, Eye } from 'lucide-react';
 import type { AchPayment, ISO20022GeneratedMessage, ParsedBankStatement, ParsedStatementTransaction } from '../types.js';
-import { mockAchPayments } from '../constants.js';
+import { iso20022Service } from '../services/iso20022Service.js';
 
-// ─── Mock iso20022 service (frontend-only, generates demo XML) ────
-
-const SAMPLE_CAMT053 = `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
-  <BkToCstmrStmt>
-    <GrpHdr>
-      <MsgId>CAMT053-SAMPLE-001</MsgId>
-      <CreDtTm>2025-03-15T12:00:00</CreDtTm>
-    </GrpHdr>
-    <Stmt>
-      <Id>STMT-20250315</Id>
-      <Acct><Id><Othr><Id>0123456789</Id></Othr></Id></Acct>
-      <Ntry>
-        <Amt Ccy="USD">1500.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <BookgDt><Dt>2025-03-15</Dt></BookgDt>
-        <NtryDtls><TxDtls>
-          <Refs><EndToEndId>INV-2025-001</EndToEndId></Refs>
-          <RltdPties><Dbtr><Nm>Acme Corp</Nm></Dbtr></RltdPties>
-          <RmtInf><Ustrd>Invoice payment INV-2025-001</Ustrd></RmtInf>
-        </TxDtls></NtryDtls>
-      </Ntry>
-      <Ntry>
-        <Amt Ccy="USD">750.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <BookgDt><Dt>2025-03-15</Dt></BookgDt>
-        <NtryDtls><TxDtls>
-          <Refs><EndToEndId>SUB-2025-042</EndToEndId></Refs>
-          <RltdPties><Dbtr><Nm>Jane Smith Industries</Nm></Dbtr></RltdPties>
-          <RmtInf><Ustrd>Subscription payment Q1 2025</Ustrd></RmtInf>
-        </TxDtls></NtryDtls>
-      </Ntry>
-    </Stmt>
-  </BkToCstmrStmt>
-</Document>`;
-
-function generateMockPainXml(payments: AchPayment[]): string {
-  const instructions = payments.map(p => `
-    <CdtTrfTxInf>
-      <PmtId><EndToEndId>${p.id}</EndToEndId></PmtId>
-      <Amt><InstdAmt Ccy="${p.currencyCode || 'USD'}">${(p.amountCents / 100).toFixed(2)}</InstdAmt></Amt>
-      <CdtrAgt><FinInstnId><ClrSysMmbId><MmbId>021000021</MmbId></ClrSysMmbId></FinInstnId></CdtrAgt>
-      <Cdtr><Nm>${p.description || 'Payee'}</Nm></Cdtr>
-      <CdtrAcct><Id><Othr><Id>333456118812</Id></Othr></Id></CdtrAcct>
-      <RmtInf><Ustrd>${p.description || `Payment ${p.id}`}</Ustrd></RmtInf>
-    </CdtTrfTxInf>`).join('\n');
-
-  const total = payments.reduce((s, p) => s + p.amountCents, 0) / 100;
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
-  <CstmrCdtTrfInitn>
-    <GrpHdr>
-      <MsgId>SOVR-ACH-${Date.now()}</MsgId>
-      <CreDtTm>${new Date().toISOString()}</CreDtTm>
-      <NbOfTxs>${payments.length}</NbOfTxs>
-      <CtrlSum>${total.toFixed(2)}</CtrlSum>
-      <InitgPty><Nm>SOVR Development Holdings LLC</Nm><Id><OrgId><Othr><Id>SOVRDHL</Id></Othr></OrgId></Id></InitgPty>
-    </GrpHdr>
-    <PmtInf>
-      <PmtInfId>PMT-${Date.now()}</PmtInfId>
-      <PmtMtd>TRF</PmtMtd>
-      <NbOfTxs>${payments.length}</NbOfTxs>
-      <CtrlSum>${total.toFixed(2)}</CtrlSum>
-      <PmtTpInf><LclInstrm><Cd>${payments[0]?.achClassCode || 'CCD'}</Cd></LclInstrm></PmtTpInf>
-      <ReqdExctnDt>${new Date().toISOString().split('T')[0]}</ReqdExctnDt>
-      <Dbtr>
-        <Nm>SOVR Development Holdings LLC</Nm>
-      </Dbtr>
-      <DbtrAcct><Id><Othr><Id>0000000000</Id></Othr></Id></DbtrAcct>
-      <DbtrAgt><FinInstnId><ClrSysMmbId><MmbId>000000000</MmbId></ClrSysMmbId></FinInstnId></DbtrAgt>${instructions}
-    </PmtInf>
-  </CstmrCdtTrfInitn>
-</Document>`;
-}
-
-function parseMockCamt(xml: string): ParsedStatementTransaction[] {
-  // Simple regex parser for demo (real app uses iso20022.js server-side)
-  const entries: ParsedStatementTransaction[] = [];
-  const entryRegex = /<Ntry>([\s\S]*?)<\/Ntry>/g;
-  let match;
-  let idx = 0;
-  while ((match = entryRegex.exec(xml)) !== null) {
-    const block = match[1];
-    const amount = block.match(/<Amt[^>]*>([^<]+)<\/Amt>/)?.[1] || '0';
-    const indicator = block.match(/<CdtDbtInd>([^<]+)<\/CdtDbtInd>/)?.[1] || 'CRDT';
-    const date = block.match(/<Dt>([^<]+)<\/Dt>/)?.[1] || new Date().toISOString().split('T')[0];
-    const ref = block.match(/<EndToEndId>([^<]+)<\/EndToEndId>/)?.[1] || '';
-    const name = block.match(/<Nm>([^<]+)<\/Nm>/)?.[1] || '';
-    const desc = block.match(/<Ustrd>([^<]+)<\/Ustrd>/)?.[1] || '';
-    entries.push({
-      id: `txn-${idx++}`,
-      amount: parseFloat(amount) * 100,
-      currency: 'USD',
-      creditDebit: indicator === 'CRDT' ? 'credit' : 'debit',
-      date,
-      description: desc,
-      counterpartyName: name,
-      counterpartyAccount: '',
-      reference: ref,
-      matchStatus: 'unmatched',
-    });
-  }
-  return entries;
-}
+// Virtualization logic moved to iso20022Service.ts or handled via service flags.
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -120,7 +16,7 @@ interface ISO20022ViewProps {
 // ─── Component ────────────────────────────────────────────────────
 
 export const ISO20022View: React.FC<ISO20022ViewProps> = ({
-  achPayments = mockAchPayments,
+  achPayments = [],
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('generate');
   const [selectedPayments, setSelectedPayments] = useState<Set<string>>(new Set());
@@ -129,6 +25,7 @@ export const ISO20022View: React.FC<ISO20022ViewProps> = ({
   const [parsedTransactions, setParsedTransactions] = useState<ParsedStatementTransaction[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [virtualize, setVirtualize] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ─── Generate Tab ─────────────────────────────────────────────
@@ -153,8 +50,20 @@ export const ISO20022View: React.FC<ISO20022ViewProps> = ({
   const handleGenerate = useCallback(() => {
     const selected = achPayments.filter(p => selectedPayments.has(p.id));
     if (selected.length === 0) return;
-    const xml = generateMockPainXml(selected);
-    setGeneratedXml(xml);
+    
+    // In live mode, we should have real creditor details. 
+    // For now, we use the service which uses the configured defaults or payment metadata.
+    const message = iso20022Service.generateACHCreditInitiation(
+      selected,
+      selected.map(p => ({
+        name: p.description || 'Recipient',
+        accountNumber: 'REDACTED', // Should be fetched from secure vault/metadata
+        routingNumber: 'REDACTED',
+        remittanceInfo: p.description
+      }))
+    );
+    
+    setGeneratedXml(message.xml);
     setShowPreview(true);
   }, [achPayments, selectedPayments]);
 
@@ -185,17 +94,21 @@ export const ISO20022View: React.FC<ISO20022ViewProps> = ({
     reader.onload = (ev) => {
       const xml = ev.target?.result as string;
       setImportedXml(xml);
-      const txns = parseMockCamt(xml);
-      setParsedTransactions(txns);
+      
+      try {
+        const statement = iso20022Service.parseBankStatement(xml);
+        // Flatten all entries from all statements for simple display
+        const allTxns = statement.statements.flatMap(s => s.entries);
+        setParsedTransactions(allTxns);
+      } catch (err) {
+        console.error('Failed to parse ISO 20022 statement:', err);
+        alert('Invalid or unsupported CAMT.053 XML format.');
+      }
     };
     reader.readAsText(file);
   }, []);
 
-  const handleLoadSample = useCallback(() => {
-    setImportedXml(SAMPLE_CAMT053);
-    const txns = parseMockCamt(SAMPLE_CAMT053);
-    setParsedTransactions(txns);
-  }, []);
+
 
   const formatCurrency = (cents: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
@@ -229,6 +142,22 @@ export const ISO20022View: React.FC<ISO20022ViewProps> = ({
             <Upload size={16} />
             <span className="text-xs font-black uppercase tracking-widest">Import CAMT.053</span>
           </button>
+          
+          <div className="flex-1" />
+          
+          <div className="flex items-center px-6 py-2">
+            <button 
+              onClick={() => setVirtualize(!virtualize)}
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                virtualize 
+                  ? 'bg-sov-accent text-sov-dark shadow-[0_0_15px_rgba(34,211,238,0.3)]' 
+                  : 'bg-white/5 text-sov-light-alt border border-white/10'
+              }`}
+            >
+              <ArrowUpDown size={10} />
+              <span>{virtualize ? 'Virtualization ON' : 'Live Mode'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="p-4 sm:p-6 min-h-[400px]">
@@ -374,13 +303,7 @@ export const ISO20022View: React.FC<ISO20022ViewProps> = ({
                     <p className="text-[10px] uppercase tracking-widest opacity-60">Bank statement file</p>
                   </div>
                 </button>
-                <button
-                  onClick={handleLoadSample}
-                  className="flex items-center justify-center space-x-2 px-6 py-3 sm:py-0 rounded-xl border border-white/10 text-sov-light-alt hover:bg-white/5 text-xs font-black uppercase tracking-widest transition-all"
-                >
-                  <FileText size={14} />
-                  <span>Load Sample</span>
-                </button>
+
               </div>
 
               {/* Parsed Transactions */}

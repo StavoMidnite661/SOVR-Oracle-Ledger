@@ -468,7 +468,7 @@ SOVR integrates with traditional payment rails through **Attestor-validated chan
 #### On-Ramp (Fiat → SOVR)
 
 ```
-1. User initiates ACH transfer to SOVR's custodial account
+1. User initiates ACH transmission$1 to SOVR's custodial account
 2. Stripe/Lithic processes payment → funds arrive in 1-3 business days
 3. Upon confirmation, Attestor quorum validates:
    - AML checks on sender/receiver

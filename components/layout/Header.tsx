@@ -4,19 +4,15 @@ import { Menu } from 'lucide-react';
 
 interface HeaderProps {
     currentViewName: string;
-    useMockData: boolean;
     isConsoleOpen: boolean;
     onMenuToggle?: () => void;
-    onToggleMockData?: () => void;
     onToggleConsole?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   currentViewName, 
-  useMockData, 
   isConsoleOpen,
   onMenuToggle, 
-  onToggleMockData,
   onToggleConsole
 }) => {
   return (
@@ -50,26 +46,24 @@ export const Header: React.FC<HeaderProps> = ({
            </div>
            <div>
              <p className="text-[8px] font-black text-sov-light-alt uppercase tracking-[0.2em] mb-0.5 opacity-50">Active Node</p>
-             <p className={`text-[10px] font-mono uppercase ${useMockData ? 'text-sov-accent' : 'text-sov-primary'}`}>
-               {useMockData ? 'VNL-ALPHA-7' : 'SOVR-MAIN-1'}
+             <p className="text-[10px] font-mono uppercase text-sov-primary">
+               SOVR-MAIN-1
              </p>
            </div>
         </div>
       </div>
 
       <div className="flex items-center space-x-3 sm:space-x-6 flex-shrink-0">
-        {/* Matrix Status — compact inline badge */}
-        <button 
-          onClick={onToggleMockData}
-          className="hidden sm:flex items-center space-x-2 bg-black/20 px-3 py-1.5 rounded-full border border-white/5 hover:bg-white/5 hover:border-white/10 transition-all cursor-pointer group/matrix"
-          title={useMockData ? "Switch to Live Mode" : "Switch to Mock Mode"}
+        {/* Matrix Status — compact inline badge (Hardcoded Live) */}
+        <div 
+          className="hidden sm:flex items-center space-x-2 bg-black/20 px-3 py-1.5 rounded-full border border-sov-green/20 transition-all"
         >
-          <div className={`w-2 h-2 rounded-full transition-all ${useMockData ? 'bg-sov-accent animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-sov-green shadow-[0_0_8px_rgba(16,185,129,0.8)] group-hover/matrix:shadow-[0_0_12px_rgba(16,185,129,1)]'}`} />
+          <div className="w-2 h-2 rounded-full bg-sov-green shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
           <span className="text-[9px] font-black text-sov-light-alt uppercase tracking-[0.2em]">Matrix:</span>
-          <span className={`text-[10px] font-black uppercase tracking-widest ${useMockData ? 'text-sov-accent' : 'text-sov-green'}`}>
-            {useMockData ? 'Virtualized' : 'Live'}
+          <span className="text-[10px] font-black uppercase tracking-widest text-sov-green">
+            Live
           </span>
-        </button>
+        </div>
 
         <button 
           onClick={onToggleConsole}

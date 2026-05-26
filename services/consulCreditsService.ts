@@ -9,29 +9,38 @@ import type {
   AuditEvent
 } from '../types.js';
 
-// ConsulCreditsWrapper contract ABI - key functions only
+// usdSOVR (Ownable + Pausable ERC-20) — verified against Base Mainnet bytecode
+// Contract: 0x65e75d0fC656a2E81eF17E9A2A8Da58D82390422
+// Owner:    0x3d48e2Ea68bdadaF3Dd02fD8dcbB0a01c39c4133
 const CONSUL_CREDITS_ABI = [
-  // View functions
+  // ERC-20 View
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)",
-  "function isTokenSupported(address token) view returns (bool)",
-  "function supportedTokens(address token) view returns (uint256)",
-  "function getExchangeRate(address token) view returns (uint256)",
-  "function calculateConsulCredits(address token, uint256 tokenAmount) view returns (uint256)",
-  "function calculateTokenAmount(address token, uint256 consulCreditsAmount) view returns (uint256)",
-  "function getTokenReserves(address token) view returns (uint256)",
-  "function oracleIntegrator() view returns (address)",
-  
-  // Write functions
-  "function depositToken(address token, uint256 tokenAmount, string memory ledgerReference)",
-  "function withdrawToken(address token, uint256 consulCreditsAmount, string memory ledgerReference)",
-  "function oracleMint(address to, uint256 amount, string memory ledgerReference)",
-  "function oracleBurn(address from, uint256 amount, string memory ledgerReference)",
-  
+  "function allowance(address owner, address spender) view returns (uint256)",
+
+  // ERC-20 Write
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+
+  // Ownable Mint/Burn
+  "function mint(address to, uint256 amount)",
+  "function burn(uint256 amount)",
+
+  // Ownable Admin
+  "function owner() view returns (address)",
+  "function paused() view returns (bool)",
+  "function pause()",
+  "function unpause()",
+  "function transferOwnership(address newOwner)",
+  "function renounceOwnership()",
+
   // Events
-  "event TokenDeposited(address indexed user, address indexed token, uint256 tokenAmount, uint256 consulCreditsIssued, uint256 exchangeRate, string indexed ledgerReference)",
-  "event TokenWithdrawn(address indexed user, address indexed token, uint256 consulCreditsBurned, uint256 tokenAmount, uint256 exchangeRate, string indexed ledgerReference)",
-  "event ExchangeRateUpdated(address indexed token, uint256 oldRate, uint256 newRate)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event Approval(address indexed owner, address indexed spender, uint256 value)",
 ];
 
 // Standard ERC-20 ABI for token interactions
@@ -307,9 +316,11 @@ export class ConsulCreditsService {
   }
 
   /**
-   * Oracle Ledger Integration - Mint consul credits for off-chain operations
+   * Sovereign Mint — calls mint(address, uint256) on-chain.
+   * Only callable by the contract owner wallet.
+   * ledgerReference is logged off-chain (not a contract parameter).
    */
-  async oracleMint(
+  async sovereignMint(
     toAddress: string, 
     amount: string, 
     ledgerReference: string,
@@ -317,23 +328,34 @@ export class ConsulCreditsService {
   ): Promise<string> {
     if (!this.contract || !this.provider) throw new Error('Service not initialized');
 
-    // Create signer from private key
     const signer = new ethers.Wallet(signerPrivateKey, this.provider);
-    const contractWithSigner = this.contract.connect(signer);
+    const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
+
+    // Verify signer is the contract owner
+    const ownerAddress = await this.contract.owner();
+    if (signer.address.toLowerCase() !== ownerAddress.toLowerCase()) {
+      throw new Error(
+        `Signer ${signer.address} is not the contract owner ${ownerAddress}. ` +
+        `Only the owner can mint usdSOVR. Update BLOCKCHAIN_SIGNER_KEY in .env.`
+      );
+    }
 
     const amountWei = ethers.parseUnits(amount, 18);
     
-    const tx = await contractWithSigner['oracleMint'](toAddress, amountWei, ledgerReference);
-    await tx.wait();
+    console.log(`[SOVR] Minting ${amount} usdSOVR to ${toAddress} | Ref: ${ledgerReference}`);
+    const tx = await contractWithSigner.mint(toAddress, amountWei);
+    const receipt = await tx.wait();
     
+    console.log(`[SOVR] Mint confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
     return tx.hash;
   }
 
   /**
-   * Oracle Ledger Integration - Burn consul credits for off-chain operations
+   * Sovereign Burn — calls burn(uint256) on-chain from the owner wallet.
+   * Burns tokens from the signer's own balance to attest off-chain credits.
+   * ledgerReference is logged off-chain (not a contract parameter).
    */
-  async oracleBurn(
-    fromAddress: string, 
+  async sovereignBurn(
     amount: string, 
     ledgerReference: string,
     signerPrivateKey: string
@@ -341,102 +363,98 @@ export class ConsulCreditsService {
     if (!this.contract || !this.provider) throw new Error('Service not initialized');
 
     const signer = new ethers.Wallet(signerPrivateKey, this.provider);
-    const contractWithSigner = this.contract.connect(signer);
+    const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
 
     const amountWei = ethers.parseUnits(amount, 18);
+
+    // Verify the signer has enough balance to burn
+    const balance = await this.contract.balanceOf(signer.address);
+    if (balance < amountWei) {
+      throw new Error(
+        `Insufficient balance to burn. Signer ${signer.address} has ` +
+        `${ethers.formatUnits(balance, 18)} usdSOVR but tried to burn ${amount}.`
+      );
+    }
     
-    const tx = await contractWithSigner['oracleBurn'](fromAddress, amountWei, ledgerReference);
-    await tx.wait();
+    console.log(`[SOVR] Burning ${amount} usdSOVR from ${signer.address} | Ref: ${ledgerReference}`);
+    const tx = await contractWithSigner.burn(amountWei);
+    const receipt = await tx.wait();
     
+    console.log(`[SOVR] Burn confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
     return tx.hash;
   }
 
   /**
-   * Start listening for contract events
+   * Sovereign Transfer — transfers usdSOVR from owner wallet to a user address.
+   */
+  async sovereignTransfer(
+    toAddress: string,
+    amount: string,
+    signerPrivateKey: string
+  ): Promise<string> {
+    if (!this.contract || !this.provider) throw new Error('Service not initialized');
+
+    const signer = new ethers.Wallet(signerPrivateKey, this.provider);
+    const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
+
+    const amountWei = ethers.parseUnits(amount, 18);
+    
+    console.log(`[SOVR] Transferring ${amount} usdSOVR to ${toAddress}`);
+    const tx = await contractWithSigner.transfer(toAddress, amountWei);
+    const receipt = await tx.wait();
+    
+    console.log(`[SOVR] Transfer confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
+    return tx.hash;
+  }
+
+  /**
+   * Start listening for contract Transfer events (covers mint, burn, and transfer)
    */
   async startEventListening(
-    onTokenDeposited: (event: ConsulCreditsTransaction) => Promise<void>,
-    onTokenWithdrawn: (event: ConsulCreditsTransaction) => Promise<void>
+    onTransfer: (event: ConsulCreditsTransaction) => Promise<void>,
+    _unused?: any
   ): Promise<void> {
     if (!this.contract || !this.config) throw new Error('Service not initialized');
 
-    // Listen for TokenDeposited events
-    const depositListener = async (...args: any[]) => {
-      const [user, token, tokenAmount, consulCreditsIssued, exchangeRate, ledgerReference, event] = args;
+    // Listen for Transfer events — this covers mint (from=0x0), burn (to=0x0), and transfers
+    const transferListener = async (...args: any[]) => {
+      const [from, to, value, event] = args;
       
       const transactionId = `${event.transactionHash}-${event.logIndex}`;
       
-      // Deduplicate based on transaction hash and log index
       if (this.processedTransactions.has(transactionId)) {
-        console.log(`Transaction ${transactionId} already processed, skipping`);
         return;
       }
       
       this.processedTransactions.add(transactionId);
-      
-      const transaction: ConsulCreditsTransaction = {
-        id: transactionId,
-        txHash: event.transactionHash,
-        blockNumber: event.blockNumber,
-        timestamp: new Date().toISOString(), // Would get actual block timestamp
-        eventType: 'DEPOSIT',
-        userAddress: user,
-        tokenAddress: token,
-        tokenSymbol: '', // Would need to resolve
-        tokenAmount: ethers.formatUnits(tokenAmount, 18),
-        consulCreditsAmount: ethers.formatUnits(consulCreditsIssued, 18),
-        exchangeRate: ethers.formatUnits(exchangeRate, 18),
-        ledgerReference,
-        confirmations: 0, // Would calculate
-        status: 'PENDING'
-      };
 
-      await onTokenDeposited(transaction);
-    };
-
-    // Listen for TokenWithdrawn events
-    const withdrawListener = async (...args: any[]) => {
-      const [user, token, consulCreditsBurned, tokenAmount, exchangeRate, ledgerReference, event] = args;
-      
-      const transactionId = `${event.transactionHash}-${event.logIndex}`;
-      
-      // Deduplicate based on transaction hash and log index
-      if (this.processedTransactions.has(transactionId)) {
-        console.log(`Transaction ${transactionId} already processed, skipping`);
-        return;
-      }
-      
-      this.processedTransactions.add(transactionId);
+      const isMint = from === ethers.ZeroAddress;
+      const isBurn = to === ethers.ZeroAddress;
       
       const transaction: ConsulCreditsTransaction = {
         id: transactionId,
         txHash: event.transactionHash,
         blockNumber: event.blockNumber,
         timestamp: new Date().toISOString(),
-        eventType: 'WITHDRAW',
-        userAddress: user,
-        tokenAddress: token,
-        tokenSymbol: '', // Would need to resolve
-        tokenAmount: ethers.formatUnits(tokenAmount, 18),
-        consulCreditsAmount: ethers.formatUnits(consulCreditsBurned, 18),
-        exchangeRate: ethers.formatUnits(exchangeRate, 18),
-        ledgerReference,
+        eventType: isMint ? 'DEPOSIT' : isBurn ? 'WITHDRAW' : 'TRANSFER',
+        userAddress: isMint ? to : from,
+        tokenAddress: this.config!.contractAddress,
+        tokenSymbol: 'usdSOVR',
+        tokenAmount: ethers.formatUnits(value, 18),
+        consulCreditsAmount: ethers.formatUnits(value, 18),
+        exchangeRate: '1.0',
+        ledgerReference: `onchain-${transactionId}`,
         confirmations: 0,
         status: 'PENDING'
       };
 
-      await onTokenWithdrawn(transaction);
+      await onTransfer(transaction);
     };
 
-    // Set up event listeners
-    this.contract.on('TokenDeposited', depositListener);
-    this.contract.on('TokenWithdrawn', withdrawListener);
+    this.contract.on('Transfer', transferListener);
+    this.eventListeners.set('Transfer', transferListener);
 
-    // Store listeners for cleanup
-    this.eventListeners.set('TokenDeposited', depositListener);
-    this.eventListeners.set('TokenWithdrawn', withdrawListener);
-
-    console.log('Event listening started for ConsulCreditsWrapper contract');
+    console.log('[SOVR] Event listening started for usdSOVR Transfer events');
   }
 
   /**
