@@ -87,6 +87,7 @@ Oracle Ledger serves as the central nervous system for all financial transaction
 - **General Ledger**: Double-entry bookkeeping with full audit trail
 - **Payment Processing**: Stripe + ACH integration
 - **Blockchain Bridging**: Base Mainnet + usdSOVR token operations
+- **Blockchain & Smart Contracts**: **ConsulCreditsWrapper** — USD-denominated token (`cUSD`) with **2 decimal places** (cents). 1 token = $1.00 USD.
 - **Risk & Compliance**: Real-time fraud detection and regulatory reporting
 - **Payroll Management**: Employee direct deposits with compliance tracking
 - **Card Management**: Company cards with expense tracking and policy enforcement

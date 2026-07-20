@@ -4,7 +4,7 @@ This directory contains the Solidity smart contracts used by Oracle Ledger.
 
 ## Contracts
 
-- `ConsulCreditsWrapper.sol` — ERC-20 compatible token for Consul Credits on Base Mainnet
+- `ConsulCreditsWrapper.sol` — USD-denominated token (`cUSD`) with 2 decimal places (cents) for Consul Credits on Base Mainnet
 
 ## Features
 
