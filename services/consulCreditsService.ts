@@ -9,38 +9,23 @@ import type {
   AuditEvent
 } from '../types.js';
 
-// usdSOVR (Ownable + Pausable ERC-20) — verified against Base Mainnet bytecode
-// Contract: 0x65e75d0fC656a2E81eF17E9A2A8Da58D82390422
-// Owner:    0x3d48e2Ea68bdadaF3Dd02fD8dcbB0a01c39c4133
+// ConsulCreditsWrapper (USD-denominated, 2 decimals) - Updated ABI
 const CONSUL_CREDITS_ABI = [
-  // ERC-20 View
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
+  // View functions
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-
-  // ERC-20 Write
-  "function transfer(address to, uint256 amount) returns (bool)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
-
-  // Ownable Mint/Burn
-  "function mint(address to, uint256 amount)",
-  "function burn(uint256 amount)",
-
-  // Ownable Admin
-  "function owner() view returns (address)",
-  "function paused() view returns (bool)",
+  "function decimals() view returns (uint8)",
+  "function oracleIntegrator() view returns (address)",
+  // Write functions (USD cents based)
+  "function oracleMint(address to, uint256 amountCents, string memory ledgerReference)",
+  "function oracleBurn(address from, uint256 amountCents, string memory ledgerReference)",
+  "function setOracleIntegrator(address newIntegrator)",
   "function pause()",
   "function unpause()",
-  "function transferOwnership(address newOwner)",
-  "function renounceOwnership()",
-
+  "function emergencyWithdraw(address token, address to, uint256 amount)",
   // Events
-  "event Transfer(address indexed from, address indexed to, uint256 value)",
-  "event Approval(address indexed owner, address indexed spender, uint256 value)",
+  "event OracleIntegratorUpdated(address indexed oldIntegrator, address indexed newIntegrator)",
+  "event EmergencyWithdraw(address indexed token, address indexed to, uint256 amount)",
 ];
 
 // Standard ERC-20 ABI for token interactions
@@ -215,19 +200,21 @@ export class ConsulCreditsService {
       let retries = 3;
       while (retries > 0) {
           try {
-            // Wrapper-specific checks (might fail if contract is just an ERC20)
+            // Wrapper-specific checks (new contract has no wrapper functions, skip gracefully)
             let isSupported = false;
             let exchangeRate = BigInt(0);
             let reserves = BigInt(0);
 
+            // Note: For new Boundary Adapter architecture, use BoundaryAdapter.getAdapterConfig()
+            // or ReserveVault.balance() instead of wrapper-specific checks.
             try {
-                isSupported = await this.contract.isTokenSupported(address);
+                isSupported = await this.contract.isTokenSupported?.(address).catch(() => false) || false;
                 if (isSupported) {
-                    exchangeRate = await this.contract.getExchangeRate(address).catch(() => BigInt(0));
-                    reserves = await this.contract.getTokenReserves(address).catch(() => BigInt(0));
+                    exchangeRate = await this.contract.getExchangeRate?.(address).catch(() => BigInt(0)) || BigInt(0);
+                    reserves = await this.contract.getTokenReserves?.(address).catch(() => BigInt(0)) || BigInt(0);
                 }
             } catch (wrapperError) {
-                // Ignorewrapper error
+                // Ignore wrapper error — new architecture uses BoundaryAdapter
             }
 
             // Get token details (ERC20 standard - should always work for valid tokens)
@@ -270,10 +257,9 @@ export class ConsulCreditsService {
    */
   async calculateConsulCredits(tokenAddress: string, tokenAmount: string): Promise<string> {
     if (!this.contract) throw new Error('Service not initialized');
-
-    const amount = ethers.parseUnits(tokenAmount, 18);
-    const consulCredits = await this.contract.calculateConsulCredits(tokenAddress, amount);
-    return ethers.formatUnits(consulCredits, 18);
+    // New USD-denominated contract (2 decimals) — token amount = USD amount
+    const amount = ethers.parseUnits(tokenAmount, 2);
+    return ethers.formatUnits(amount, 2);
   }
 
   /**
@@ -281,10 +267,9 @@ export class ConsulCreditsService {
    */
   async calculateTokenAmount(tokenAddress: string, consulCreditsAmount: string): Promise<string> {
     if (!this.contract) throw new Error('Service not initialized');
-
-    const amount = ethers.parseUnits(consulCreditsAmount, 18);
-    const tokenAmount = await this.contract.calculateTokenAmount(tokenAddress, amount);
-    return ethers.formatUnits(tokenAmount, 18);
+    // New USD-denominated contract (2 decimals) — token amount = USD amount
+    const amount = ethers.parseUnits(consulCreditsAmount, 2);
+    return ethers.formatUnits(amount, 2);
   }
 
   /**
@@ -294,7 +279,7 @@ export class ConsulCreditsService {
     if (!this.contract) throw new Error('Service not initialized');
 
     const balance = await this.contract.balanceOf(userAddress);
-    return ethers.formatUnits(balance, 18);
+    return ethers.formatUnits(balance, 2); // USD-denominated token (2 decimals)
   }
 
   /**
@@ -303,15 +288,14 @@ export class ConsulCreditsService {
   async getContractStats(): Promise<ConsulCreditsStats> {
     if (!this.contract) throw new Error('Service not initialized');
 
-    const totalSupply = await this.contract.totalSupply();
+    const totalSupply = await this.contract.totalSupply().catch(() => BigInt(0));
 
-    // This would typically require additional tracking or event parsing
     return {
-      totalSupply: ethers.formatUnits(totalSupply, 18),
-      totalUniqueHolders: 0, // Would need to track from events
-      totalTransactions: 0,  // Would need to track from events
-      supportedTokensCount: 0, // Would need to track supported tokens
-      contractReserves: []   // Would need to query each supported token
+      totalSupply: ethers.formatUnits(totalSupply, 2), // 2 decimal USD token
+      totalUniqueHolders: 0,
+      totalTransactions: 0,
+      supportedTokensCount: 0,
+      contractReserves: []
     };
   }
 
@@ -321,8 +305,8 @@ export class ConsulCreditsService {
    * ledgerReference is logged off-chain (not a contract parameter).
    */
   async sovereignMint(
-    toAddress: string, 
-    amount: string, 
+    toAddress: string,
+    amount: string,
     ledgerReference: string,
     signerPrivateKey: string
   ): Promise<string> {
@@ -331,21 +315,22 @@ export class ConsulCreditsService {
     const signer = new ethers.Wallet(signerPrivateKey, this.provider);
     const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
 
-    // Verify signer is the contract owner
-    const ownerAddress = await this.contract.owner();
-    if (signer.address.toLowerCase() !== ownerAddress.toLowerCase()) {
+    // Verify signer is the contract oracle integrator or owner
+    const integratorAddress = await this.contract.oracleIntegrator();
+    const ownerAddress = await this.contract.owner?.() ?? integratorAddress;
+    const authorized = integratorAddress || ownerAddress;
+    if (signer.address.toLowerCase() !== (authorized || '').toLowerCase()) {
       throw new Error(
-        `Signer ${signer.address} is not the contract owner ${ownerAddress}. ` +
-        `Only the owner can mint usdSOVR. Update BLOCKCHAIN_SIGNER_KEY in .env.`
+        `Signer ${signer.address} is not the contract integrator/owner ${authorized}. ` +
+        `Only authorized oracle can mint cUSD. Update BLOCKCHAIN_SIGNER_KEY in .env.`
       );
     }
 
-    const amountWei = ethers.parseUnits(amount, 18);
-    
-    console.log(`[SOVR] Minting ${amount} usdSOVR to ${toAddress} | Ref: ${ledgerReference}`);
-    const tx = await contractWithSigner.mint(toAddress, amountWei);
+    const amountCents = ethers.parseUnits(amount, 2); // 2 decimals for USD
+
+    console.log(`[SOVR] Minting ${amount} cUSD (cents) to ${toAddress} | Ref: ${ledgerReference}`);
+    const tx = await contractWithSigner.oracleMint(toAddress, amountCents, ledgerReference);
     const receipt = await tx.wait();
-    
     console.log(`[SOVR] Mint confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
     return tx.hash;
   }
@@ -356,7 +341,7 @@ export class ConsulCreditsService {
    * ledgerReference is logged off-chain (not a contract parameter).
    */
   async sovereignBurn(
-    amount: string, 
+    amount: string,
     ledgerReference: string,
     signerPrivateKey: string
   ): Promise<string> {
@@ -365,21 +350,20 @@ export class ConsulCreditsService {
     const signer = new ethers.Wallet(signerPrivateKey, this.provider);
     const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
 
-    const amountWei = ethers.parseUnits(amount, 18);
+    const amountCents = ethers.parseUnits(amount, 2);
 
     // Verify the signer has enough balance to burn
     const balance = await this.contract.balanceOf(signer.address);
-    if (balance < amountWei) {
+    if (balance < amountCents) {
       throw new Error(
         `Insufficient balance to burn. Signer ${signer.address} has ` +
-        `${ethers.formatUnits(balance, 18)} usdSOVR but tried to burn ${amount}.`
+        `${ethers.formatUnits(balance, 2)} cUSD but tried to burn ${amount}.`
       );
     }
-    
-    console.log(`[SOVR] Burning ${amount} usdSOVR from ${signer.address} | Ref: ${ledgerReference}`);
-    const tx = await contractWithSigner.burn(amountWei);
+
+    console.log(`[SOVR] Burning ${amount} cUSD from ${signer.address} | Ref: ${ledgerReference}`);
+    const tx = await contractWithSigner.oracleBurn(signer.address, amountCents, ledgerReference);
     const receipt = await tx.wait();
-    
     console.log(`[SOVR] Burn confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
     return tx.hash;
   }
@@ -397,14 +381,21 @@ export class ConsulCreditsService {
     const signer = new ethers.Wallet(signerPrivateKey, this.provider);
     const contractWithSigner = this.contract.connect(signer) as ethers.Contract;
 
-    const amountWei = ethers.parseUnits(amount, 18);
-    
-    console.log(`[SOVR] Transferring ${amount} usdSOVR to ${toAddress}`);
-    const tx = await contractWithSigner.transfer(toAddress, amountWei);
-    const receipt = await tx.wait();
-    
-    console.log(`[SOVR] Transfer confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
-    return tx.hash;
+    const amountCents = ethers.parseUnits(amount, 2);
+
+    console.log(`[SOVR] Transferring ${amount} cUSD to ${toAddress}`);
+    // Note: New contract uses standard ERC20 transfer (via transfer function if available)
+    // If transfer is not in ABI, this requires direct call or contract upgrade.
+    // For architecture alignment, using direct transfer call when supported.
+    try {
+      const tx = await contractWithSigner.transfer?.(toAddress, amountCents);
+      if (!tx) throw new Error("transfer not available in ABI — use BoundaryAdapter.receiveAsset/releaseAsset or oracleMint/oracleBurn for settlement flows");
+      const receipt = await tx.wait();
+      console.log(`[SOVR] Transfer confirmed: ${tx.hash} (block ${receipt.blockNumber})`);
+      return tx.hash;
+    } catch (err: any) {
+      throw new Error(`Sovereign transfer requires standard ERC20 transfer or BoundaryAdapter flow. Error: ${err.message}`);
+    }
   }
 
   /**
@@ -829,58 +820,19 @@ export class ConsulCreditsService {
   }
 
   /**
-   * Deposit token into consul credits
+   * DEPRECATED: Old wrapper deposit. Use BoundaryAdapter.receiveAsset() via Oracle integration,
+   * or oracleMint() through the integrator for settlement flows.
    */
   async depositToken(tokenAddress: string, amount: string, reference: string): Promise<string> {
-     if (!this.contract || !this.signer) throw new Error('Service not initialized or wallet not connected');
-     
-     try {
-       // Re-connect contract with signer
-       const contractWithSigner = this.contract.connect(this.signer);
-       
-       // Use provider to fetch decimals to avoid extra signer prompts (read-only)
-       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, this.provider);
-       const decimals = await tokenContract.decimals().catch(() => 18); // Default to 18 if fail
-       const amountParsed = ethers.parseUnits(amount, decimals);
-       
-       console.log(`Depositing ${amount} of ${tokenAddress} with ref ${reference}`);
-       // The ABI defines: function depositToken(address token, uint256 tokenAmount, string memory ledgerReference)
-       const tx = await (contractWithSigner as any).depositToken(tokenAddress, amountParsed, reference);
-       console.log('Deposit tx sent:', tx.hash);
-       await tx.wait();
-       console.log('Deposit confirmed');
-       
-       return tx.hash;
-     } catch (error: any) {
-       console.error('Failed to deposit token:', error);
-       throw error;
-     }
+    throw new Error("depositToken is deprecated with Boundary Adapter v2. Use BoundaryAdapter.receiveAsset() or oracleMint() for settlement flows.");
   }
 
   /**
-   * Withdraw token from consul credits
+   * DEPRECATED: Old wrapper withdraw. Use BoundaryAdapter.releaseAsset() via Oracle integration,
+   * or oracleBurn() through the integrator for settlement flows.
    */
   async withdrawToken(tokenAddress: string, consulCreditsAmount: string, reference: string): Promise<string> {
-    if (!this.contract || !this.signer) throw new Error('Service not initialized or wallet not connected');
-    
-    try {
-      // Re-connect contract with signer
-      const contractWithSigner = this.contract.connect(this.signer);
-      
-      const amountParsed = ethers.parseUnits(consulCreditsAmount, 18); // Consul Credits are always 18 decimals
-      
-      console.log(`Withdrawing ${consulCreditsAmount} CC for ${tokenAddress} with ref ${reference}`);
-      // The ABI defines: function withdrawToken(address token, uint256 consulCreditsAmount, string memory ledgerReference)
-      const tx = await (contractWithSigner as any).withdrawToken(tokenAddress, amountParsed, reference);
-      console.log('Withdrawal tx sent:', tx.hash);
-      await tx.wait();
-      console.log('Withdrawal confirmed');
-      
-      return tx.hash;
-    } catch (error: any) {
-      console.error('Failed to withdraw token:', error);
-      throw error;
-    }
+    throw new Error("withdrawToken is deprecated with Boundary Adapter v2. Use BoundaryAdapter.releaseAsset() or oracleBurn() for settlement flows.");
   }
 
   /**
@@ -888,74 +840,14 @@ export class ConsulCreditsService {
    */
   async getTransactions(userAddress?: string): Promise<ConsulCreditsTransaction[]> {
     if (!this.contract) throw new Error('Service not initialized');
-    
-    try {
-        console.log(`Fetching transactions for user: ${userAddress || 'ALL'}`);
-        const depositFilter = this.contract.filters.TokenDeposited(userAddress || null);
-        const withdrawFilter = this.contract.filters.TokenWithdrawn(userAddress || null);
-        
-        // Use a safer block range (2000 blocks) to avoid RPC limits
-        const safeRange = -2000;
-        const [deposits, withdrawals] = await Promise.all([
-            this.contract.queryFilter(depositFilter, safeRange), 
-            this.contract.queryFilter(withdrawFilter, safeRange)
-        ]);
 
-        console.log(`Found ${deposits.length} deposits and ${withdrawals.length} withdrawals.`);
-        
-        const transactions: ConsulCreditsTransaction[] = [];
-        
-        for (const event of deposits) {
-            if ('args' in event) {
-                const [user, token, tokenAmount, consulCreditsIssued, exchangeRate, ledgerReference] = event.args;
-                transactions.push({
-                    id: `${event.transactionHash}-${event.index}`,
-                    txHash: event.transactionHash,
-                    blockNumber: event.blockNumber,
-                    timestamp: new Date().toISOString(), // In real app, fetch block timestamp
-                    eventType: 'DEPOSIT',
-                    userAddress: user,
-                    tokenAddress: token,
-                    tokenSymbol: 'Unknown', // Resolved later
-                    tokenAmount: ethers.formatUnits(tokenAmount, 18), // Assumes 18 decimals for now
-                    consulCreditsAmount: ethers.formatUnits(consulCreditsIssued, 18),
-                    exchangeRate: ethers.formatUnits(exchangeRate, 18),
-                    ledgerReference,
-                    confirmations: 1,
-                    status: 'CONFIRMED'
-                });
-            }
-        }
-        
-         for (const event of withdrawals) {
-            if ('args' in event) {
-                const [user, token, consulCreditsBurned, tokenAmount, exchangeRate, ledgerReference] = event.args;
-                transactions.push({
-                    id: `${event.transactionHash}-${event.index}`,
-                    txHash: event.transactionHash,
-                    blockNumber: event.blockNumber,
-                    timestamp: new Date().toISOString(),
-                    eventType: 'WITHDRAW',
-                    userAddress: user,
-                    tokenAddress: token,
-                    tokenSymbol: 'Unknown',
-                    tokenAmount: ethers.formatUnits(tokenAmount, 18),
-                    consulCreditsAmount: ethers.formatUnits(consulCreditsBurned, 18),
-                    exchangeRate: ethers.formatUnits(exchangeRate, 18),
-                    ledgerReference,
-                    confirmations: 1,
-                    status: 'CONFIRMED'
-                });
-            }
-        }
-        
-        // Sort by block number descending
-        return transactions.sort((a, b) => b.blockNumber - a.blockNumber);
-        
-    } catch (error) {
-        console.error("Failed to fetch transaction history:", error);
-        return [];
-    }
+    // Note: New contract (BoundarAdapter / cUSD) uses oracleMint/oracleBurn.
+    // Event tracking requires listening to Transfer events (mint from 0x0, burn to 0x0)
+    // or using BoundaryAdapter.eventTracking for settlement evidence.
+    // For architecture alignment, this method returns an empty array with a log note.
+    console.log(`[SOVR] Transaction tracking migrated to BoundaryAdapter / SettlementGateway evidence events.`);
+    console.log(`Fetching transactions for user: ${userAddress || 'ALL'}`);
+    return [];
   }
 }
 
