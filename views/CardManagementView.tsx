@@ -110,6 +110,11 @@ export const CardManagementView: React.FC<CardManagementViewProps> = ({
   const [selectedTransaction, setSelectedTransaction] = useState<CardTransaction | null>(null);
   const [isNewCardModalOpen, setIsNewCardModalOpen] = useState(false);
   const [isEditCardModalOpen, setIsEditCardModalOpen] = useState(false);
+  
+  // NEW: Expense tracking state
+  const [showReceiptUpload, setShowReceiptUpload] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [approvalComment, setApprovalComment] = useState('');
   const [cardSortConfig, setCardSortConfig] = useState<SortConfig | null>({ key: 'assignedTo' as keyof CompanyCard, direction: 'ascending' });
   const [transactionSortConfig, setTransactionSortConfig] = useState<SortConfig | null>({ key: 'transactionDate' as keyof CardTransaction, direction: 'descending' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -257,6 +262,22 @@ export const CardManagementView: React.FC<CardManagementViewProps> = ({
 
   const handleViewTransaction = (transaction: CardTransaction) => {
     setSelectedTransaction(transaction);
+  };
+
+  // NEW: Flag transaction for policy violation
+  const handleFlagTransaction = (transaction: CardTransaction) => {
+    const reason = prompt('Reason for policy violation flag:');
+    if (reason) {
+      // In real app: update the transaction
+      console.log('Flagging transaction for policy violation:', transaction.id, reason);
+      alert('Transaction flagged (demo)');
+    }
+  };
+
+  // NEW: Submit for reimbursement
+  const handleSubmitReimbursement = (transaction: CardTransaction) => {
+    console.log('Submitting for reimbursement:', transaction.id);
+    alert('Reimbursement submitted (demo)');
   };
 
   // Card reveal functionality
@@ -692,12 +713,32 @@ export const CardManagementView: React.FC<CardManagementViewProps> = ({
                       </span>
                     </td>
                     <td className="p-3">
-                      <button 
-                        onClick={() => handleViewTransaction(transaction)}
-                        className="bg-blue-500/20 text-blue-400 text-xs font-bold py-1 px-3 rounded-lg hover:bg-blue-500/30 transition-colors"
-                      >
-                        View
-                      </button>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={() => handleViewTransaction(transaction)}
+                          className="bg-blue-500/20 text-blue-400 text-xs font-bold py-1 px-3 rounded-lg hover:bg-blue-500/30 transition-colors"
+                        >
+                          View
+                        </button>
+                        {transaction.status === 'Pending' && (
+                          <>
+                            <button 
+                              onClick={() => handleFlagTransaction(transaction)}
+                              className="bg-orange-500/20 text-orange-400 text-xs font-bold py-1 px-2 rounded-lg hover:bg-orange-500/30"
+                              title="Flag for policy violation"
+                            >
+                              Flag
+                            </button>
+                            <button 
+                              onClick={() => handleSubmitReimbursement(transaction)}
+                              className="bg-sov-accent/20 text-sov-accent text-xs font-bold py-1 px-2 rounded-lg hover:bg-sov-accent/30"
+                              title="Submit for reimbursement"
+                            >
+                              Reimburse
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -777,15 +818,21 @@ export const CardManagementView: React.FC<CardManagementViewProps> = ({
         )}
       </Modal>
 
-      {/* Transaction Details Modal */}
+      {/* Transaction Details Modal - ENHANCED with Expense Tracking */}
       <Modal 
         isOpen={!!selectedTransaction} 
-        onClose={() => setSelectedTransaction(null)} 
+        onClose={() => {
+          setSelectedTransaction(null);
+          setApprovalComment('');
+          setShowReceiptUpload(false);
+          setReceiptFile(null);
+        }} 
         title={`Transaction Details: ${selectedTransaction?.merchantName}`} 
         gradient="from-blue-500/20 to-blue-500/5"
       >
         {selectedTransaction && (
           <div className="space-y-6 animate-in slide-in-from-right-8 duration-300">
+            {/* Basic Info */}
             <div className="grid grid-cols-2 gap-6">
               <ModalSection className="space-y-4">
                 <ModalField label="Merchant" value={selectedTransaction.merchantName} />
@@ -806,23 +853,142 @@ export const CardManagementView: React.FC<CardManagementViewProps> = ({
                 <ModalField label="Posting Date" value={selectedTransaction.postingDate || 'Pending'} />
               </ModalSection>
             </div>
-            
+
+            {/* NEW: Expense Tracking Section */}
             <ModalSection>
-              <div className="grid grid-cols-2 gap-4">
-                <ModalField label="Card" value={cards.find(c => c.id === selectedTransaction.cardId)?.assignedTo || 'Unknown'} />
-                <ModalField label="Card Number" value={<span className="font-mono">****-****-****-{cards.find(c => c.id === selectedTransaction.cardId)?.cardNumber.last4}</span>} />
+              <ModalSectionHeader>Expense Tracking & Compliance</ModalSectionHeader>
+              
+              <div className="grid grid-cols-2 gap-4 mt-3">
+                <div>
+                  <ModalLabel>Policy Violation</ModalLabel>
+                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    selectedTransaction.policyViolation ? 'bg-sov-red/20 text-sov-red' : 'bg-sov-green/20 text-sov-green'
+                  }`}>
+                    {selectedTransaction.policyViolation ? 'YES' : 'No'}
+                  </span>
+                  {selectedTransaction.policyViolationReason && (
+                    <p className="text-xs text-sov-red mt-1">{selectedTransaction.policyViolationReason}</p>
+                  )}
+                </div>
+                
+                <div>
+                  <ModalLabel>Reimbursement Status</ModalLabel>
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-sov-accent/20 text-sov-accent">
+                    {selectedTransaction.reimbursementStatus || 'Not Submitted'}
+                  </span>
+                </div>
               </div>
+
+              {selectedTransaction.approvedBy && (
+                <div className="mt-3">
+                  <ModalLabel>Approved By</ModalLabel>
+                  <p className="text-sm text-sov-light">{selectedTransaction.approvedBy} {selectedTransaction.approvedAt && `on ${selectedTransaction.approvedAt}`}</p>
+                </div>
+              )}
             </ModalSection>
 
-            {selectedTransaction.location && (
-              <ModalSection>
-                <ModalField label="Location" value={selectedTransaction.location} />
-              </ModalSection>
-            )}
+            {/* Receipt Section */}
+            <ModalSection>
+              <ModalSectionHeader>Receipt</ModalSectionHeader>
+              {selectedTransaction.receiptUrl ? (
+                <div className="flex items-center justify-between bg-sov-dark p-3 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sov-green">📎</span>
+                    <span className="text-sm text-sov-light">{selectedTransaction.receiptFileName || 'Receipt attached'}</span>
+                  </div>
+                  <a 
+                    href={selectedTransaction.receiptUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-xs bg-sov-accent/20 text-sov-accent px-3 py-1 rounded hover:bg-sov-accent/30"
+                  >
+                    View Receipt
+                  </a>
+                </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={() => setShowReceiptUpload(!showReceiptUpload)}
+                    className="text-sm bg-sov-accent/20 text-sov-accent px-4 py-2 rounded-lg hover:bg-sov-accent/30"
+                  >
+                    {showReceiptUpload ? 'Cancel Upload' : 'Upload Receipt'}
+                  </button>
+                  
+                  {showReceiptUpload && (
+                    <div className="mt-3">
+                      <input 
+                        type="file" 
+                        accept="image/*,.pdf" 
+                        onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                        className="text-sm text-sov-light-alt"
+                      />
+                      <button
+                        onClick={() => {
+                          // In real app: upload to storage and update transaction
+                          if (receiptFile) {
+                            const fakeUrl = URL.createObjectURL(receiptFile);
+                            // This would normally call updateCardTransaction
+                            console.log('Receipt uploaded:', receiptFile.name);
+                            alert('Receipt uploaded successfully (demo)');
+                            setShowReceiptUpload(false);
+                            setReceiptFile(null);
+                          }
+                        }}
+                        disabled={!receiptFile}
+                        className="ml-3 px-4 py-1 bg-sov-accent text-sov-dark text-sm rounded disabled:opacity-50"
+                      >
+                        Upload
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </ModalSection>
 
-            {selectedTransaction.description && (
+            {/* Approval Actions */}
+            {selectedTransaction.status === 'Pending' && (
               <ModalSection>
-                <ModalField label="Description" value={selectedTransaction.description} />
+                <ModalSectionHeader>Approval Actions</ModalSectionHeader>
+                <div className="space-y-3">
+                  <div>
+                    <ModalLabel>Approval Comment (Optional)</ModalLabel>
+                    <input
+                      type="text"
+                      value={approvalComment}
+                      onChange={(e) => setApprovalComment(e.target.value)}
+                      className="w-full bg-sov-dark border border-white/10 rounded-lg p-2 text-sm"
+                      placeholder="Approved per policy..."
+                    />
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        // In real app: call update function
+                        console.log('Approving transaction', selectedTransaction.id, approvalComment);
+                        alert('Transaction approved (demo)');
+                        setSelectedTransaction(null);
+                      }}
+                      className="flex-1 bg-sov-green/20 text-sov-green py-2 rounded-lg hover:bg-sov-green/30"
+                    >
+                      Approve Expense
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        const reason = prompt('Reason for rejection:');
+                        if (reason) {
+                          console.log('Rejecting transaction', selectedTransaction.id, reason);
+                          alert('Transaction rejected (demo)');
+                          setSelectedTransaction(null);
+                        }
+                      }}
+                      className="flex-1 bg-sov-red/20 text-sov-red py-2 rounded-lg hover:bg-sov-red/30"
+                    >
+                      Reject Expense
+                    </button>
+                  </div>
+                </div>
               </ModalSection>
             )}
 

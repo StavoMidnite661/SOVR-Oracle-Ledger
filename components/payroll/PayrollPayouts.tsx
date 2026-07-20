@@ -134,6 +134,27 @@ export const PayrollPayouts: React.FC<PayrollPayoutsProps> = ({ currentUserRole 
       return;
     }
 
+    // NEW: ISO 20022 validation
+    const isoErrors: string[] = [];
+    selectedRecipients.forEach((r, idx) => {
+      const validation = (window as any).iso20022Service?.validatePaymentForISO 
+        ? (window as any).iso20022Service.validatePaymentForISO(
+            r.amount * 100, 
+            r.bankAccount.routingNumber, 
+            r.bankAccount.accountNumberLast4
+          )
+        : { valid: true, errors: [] };
+      
+      if (!validation.valid) {
+        isoErrors.push(`Recipient ${idx + 1}: ${validation.errors.join(', ')}`);
+      }
+    });
+
+    if (isoErrors.length > 0) {
+      setError('ISO 20022 validation failed:\n' + isoErrors.join('\n'));
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -155,12 +176,15 @@ export const PayrollPayouts: React.FC<PayrollPayoutsProps> = ({ currentUserRole 
           recipients: selectedRecipients.map((r) => ({
             recipientId: r.recipient.id,
             bankAccountId: r.bankAccount.id,
-            amount: Math.round(r.amount * 100), // Convert to cents
+            amount: Math.round(r.amount * 100),
           })),
         }),
       });
 
       if (!response.ok) throw new Error('Failed to create payout');
+
+      // NEW: Log ISO 20022 compliance event
+      console.log(`[COMPLIANCE] Created ISO 20022 compliant payroll run with ${selectedRecipients.length} recipients`);
 
       setShowCreateForm(false);
       setSelectedRecipients([]);

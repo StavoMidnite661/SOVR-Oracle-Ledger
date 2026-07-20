@@ -9,6 +9,7 @@ interface HeaderProps {
     onMenuToggle?: () => void;
     onToggleMockData?: () => void;
     onToggleConsole?: () => void;
+    isDemoMode?: boolean; // NEW: For Vercel / fallback indicator
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -17,7 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   isConsoleOpen,
   onMenuToggle, 
   onToggleMockData,
-  onToggleConsole
+  onToggleConsole,
+  isDemoMode = false
 }) => {
   return (
     <header className="bg-black/40 backdrop-blur-xl px-3 sm:px-6 py-3 flex justify-between items-center border-b border-white/5 relative z-40">
@@ -58,6 +60,14 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center space-x-3 sm:space-x-6 flex-shrink-0">
+        {/* Demo Mode Badge (Vercel / No Backend) */}
+        {isDemoMode && (
+          <div className="hidden sm:flex items-center space-x-2 bg-yellow-500/10 border border-yellow-500/30 px-3 py-1.5 rounded-full">
+            <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+            <span className="text-[9px] font-black text-yellow-400 uppercase tracking-[0.2em]">Demo Mode</span>
+          </div>
+        )}
+
         {/* Matrix Status — compact inline badge */}
         <button 
           onClick={onToggleMockData}

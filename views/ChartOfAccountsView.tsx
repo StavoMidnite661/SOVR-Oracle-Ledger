@@ -8,6 +8,13 @@ interface ChartOfAccountsViewProps {
   journalEntries: JournalEntry[];
 }
 
+// NEW: Account status and tax code (simulated on the Account interface for demo)
+interface EnhancedAccount extends Account {
+  status?: 'Active' | 'Inactive';
+  taxCode?: string;
+  normalBalance?: 'Debit' | 'Credit';
+}
+
 export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ journalEntries }) => {
   const getAccountTypeColor = (type: AccountType) => {
     switch (type) {
@@ -30,6 +37,11 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ journa
 
   const getEntityAbbreviation = (entityValue: Entity) => {
     return Object.keys(Entity).find(key => Entity[key as keyof typeof Entity] === entityValue) || 'N/A';
+  };
+
+  // NEW: Status and tax code display
+  const getStatusColor = (status?: string) => {
+    return status === 'Active' ? 'bg-sov-green/20 text-sov-green' : 'bg-gray-500/20 text-gray-400';
   };
 
   const accountBalances = useMemo(() => {
@@ -74,32 +86,50 @@ export const ChartOfAccountsView: React.FC<ChartOfAccountsViewProps> = ({ journa
               <th className="p-3">Account Name</th>
               <th className="p-3">Type</th>
               <th className="p-3">Entity</th>
+              <th className="p-3 text-center">Status</th>
+              <th className="p-3 text-center">Tax Code</th>
               <th className="p-3 text-right">Balance</th>
             </tr>
           </thead>
           <tbody>
-            {CHART_OF_ACCOUNTS.map(account => (
-              <tr key={account.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                <td className="p-3 font-mono">{account.id}</td>
-                <td className="p-3 font-semibold">{account.name}</td>
-                <td className="p-3">
-                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getAccountTypeColor(account.type)}`}>
-                    {account.type}
-                  </span>
-                </td>
-                <td className="p-3">
-                  <span title={account.entity} className={`px-2 py-1 text-xs font-semibold rounded-full ${getEntityTypeColor(account.entity)}`}>
-                    {getEntityAbbreviation(account.entity)}
-                  </span>
-                </td>
-                <td className="p-3 text-right font-mono">
-                  {(accountBalances.get(account.id) || 0).toLocaleString('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                  })}
-                </td>
-              </tr>
-            ))}
+            {CHART_OF_ACCOUNTS.map(account => {
+              // Simulate enhanced account data for demo
+              const enhancedAccount = account as EnhancedAccount;
+              const status = enhancedAccount.status || 'Active';
+              const taxCode = enhancedAccount.taxCode || 'N/A';
+              
+              return (
+                <tr key={account.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                  <td className="p-3 font-mono">{account.id}</td>
+                  <td className="p-3 font-semibold">{account.name}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getAccountTypeColor(account.type)}`}>
+                      {account.type}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <span title={account.entity} className={`px-2 py-1 text-xs font-semibold rounded-full ${getEntityTypeColor(account.entity)}`}>
+                      {getEntityAbbreviation(account.entity)}
+                    </span>
+                  </td>
+                  {/* NEW: Status + Tax Code columns */}
+                  <td className="p-3">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
+                      {status}
+                    </span>
+                  </td>
+                  <td className="p-3 font-mono text-xs text-sov-light-alt">
+                    {taxCode}
+                  </td>
+                  <td className="p-3 text-right font-mono">
+                    {(accountBalances.get(account.id) || 0).toLocaleString('en-US', {
+                      style: 'currency',
+                      currency: 'USD',
+                    })}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

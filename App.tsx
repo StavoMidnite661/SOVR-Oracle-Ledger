@@ -33,7 +33,13 @@ import { ErrorBoundary } from './components/shared/ErrorBoundary.js';
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<View>(View.Dashboard);
   const [selectedJournalEntry, setSelectedJournalEntry] = useState<JournalEntry | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(() => {
+    // Persist last connected wallet address
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('connectedWalletAddress') || null;
+    }
+    return null;
+  });
 
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -57,6 +63,9 @@ const App: React.FC = () => {
   const [achReturns, setAchReturns] = useState<any[]>([]);
 
   const [useMockData, setUseMockData] = useState(false);
+  
+  // NEW: Demo mode indicator (shows when running without backend - useful for Vercel)
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -249,12 +258,12 @@ const App: React.FC = () => {
         if (accounts.length === 0) {
           console.log('Wallet disconnected');
           setWalletAddress(null);
-          // Reset balances to 0 or mock if desired, but 0 is safer for live mode
+          localStorage.removeItem('connectedWalletAddress');
           setSupportedTokens(prev => prev.map(t => ({ ...t, userWalletBalance: undefined })));
         } else {
           console.log('Account changed to:', accounts[0]);
           setWalletAddress(accounts[0]);
-          // Balances will be refreshed by the existing useEffect dependency on walletAddress
+          localStorage.setItem('connectedWalletAddress', accounts[0]);
         }
       };
       
@@ -283,6 +292,7 @@ const App: React.FC = () => {
     const loadData = async () => {
       setIsLoading(true);
       setError(null);
+      setIsDemoMode(false);
 
       if (useMockData) {
         setJournalEntries(mockJournalEntries);
@@ -300,6 +310,7 @@ const App: React.FC = () => {
         setStripeCustomers(mockStripeCustomers);
         setAchPayments(mockAchPayments);
         setDirectDepositPayouts(mockDirectDepositPayouts);
+        setIsDemoMode(true);
       } else {
         try {
           const results = await Promise.allSettled([
@@ -411,7 +422,29 @@ const App: React.FC = () => {
           }
         } catch (err) {
           console.error("Critical failure in loadData", err);
-          setError('Failed to load application data. Check console for details.');
+          
+          // NEW: Automatic fallback to mock data if backend is unavailable (Vercel / no DB)
+          console.warn("Backend unavailable — falling back to mock data (Demo Mode)");
+          setUseMockData(true);
+          setIsDemoMode(true);
+          setError(null);
+          
+          // Load mock data as fallback
+          setJournalEntries(mockJournalEntries);
+          setPurchaseOrders(mockPurchaseOrders);
+          setArInvoices(mockInvoices.filter(inv => inv.type === 'AR'));
+          setApInvoices(mockInvoices.filter(inv => inv.type === 'AP'));
+          setEmployees(mockEmployees);
+          setVendors(mockVendors);
+          setCompanyCards(mockCompanyCards);
+          setCardTransactions(mockCardTransactions);
+          setConsulCreditsConfig(mockConfig);
+          setSupportedTokens(mockSupportedTokens);
+          setConsulCreditsTransactions(mockTransactions);
+          setConsulCreditsStats(mockStats);
+          setStripeCustomers(mockStripeCustomers);
+          setAchPayments(mockAchPayments);
+          setDirectDepositPayouts(mockDirectDepositPayouts);
         }
       }
       setIsLoading(false);
@@ -514,14 +547,22 @@ const App: React.FC = () => {
     // If already connected, disconnect
     if (walletAddress) {
       setWalletAddress(null);
+      localStorage.removeItem('connectedWalletAddress');
       setSupportedTokens(prev => prev.map(t => ({ ...t, userWalletBalance: undefined })));
       console.log('Wallet disconnected by user');
       return;
     }
 
     try {
+      // Enhanced wallet detection
+      if (typeof window !== 'undefined' && !(window as any).ethereum) {
+        alert("No crypto wallet detected. Please install Rabby, MetaMask, or Coinbase Wallet.");
+        return;
+      }
+
       const address = await consulCreditsService.connectWallet();
       setWalletAddress(address);
+      localStorage.setItem('connectedWalletAddress', address);
       
       // Immediate network check
       if (typeof window !== 'undefined' && (window as any).ethereum) {
@@ -533,8 +574,6 @@ const App: React.FC = () => {
           try {
             await handleSwitchNetwork(8453);
           } catch (switchErr) {
-            // User rejected switch, but wallet is connected. 
-            // The UI will show "Wrong Network" which is acceptable.
             console.error("Network switch rejected during connection:", switchErr);
           }
         }
@@ -591,6 +630,99 @@ const App: React.FC = () => {
       throw error;
     }
   };
+
+  // NEW: Withdraw handler (was missing - critical fix)
+  const handleWithdrawToken = async (tokenAddress: string, amount: string): Promise<string> => {
+    if (!walletAddress) {
+      alert('Please connect your wallet first.');
+      throw new Error('Wallet not connected');
+    }
+    
+    try {
+      console.log(`Initiating withdraw of ${amount} CC for ${tokenAddress}`);
+      
+      const reference = `WD-${Date.now()}`;
+      const txHash = await consulCreditsService.withdrawToken(tokenAddress, amount, reference);
+      
+      // Refresh balances after successful withdraw
+      const tokenAddresses = supportedTokens.map(t => t.address);
+      try {
+        const userBalances = await consulCreditsService.getUserTokenBalances(walletAddress, tokenAddresses);
+        setSupportedTokens(prev => prev.map(token => {
+          const bal = userBalances.get(token.address);
+          return bal ? { ...token, userWalletBalance: bal } : token;
+        }));
+      } catch (e) {
+        console.warn('Balance refresh after withdraw failed:', e);
+      }
+      
+      return txHash;
+
+    } catch (error: any) {
+      console.error('Withdraw flow failed:', error);
+      throw error;
+    }
+  };
+
+  // NEW: Manual balance refresh (improvement)
+  const refreshWalletBalances = async () => {
+    if (!walletAddress) return;
+    
+    try {
+      const tokenAddresses = supportedTokens.map(t => t.address);
+      const userBalances = await consulCreditsService.getUserTokenBalances(walletAddress, tokenAddresses);
+      
+      setSupportedTokens(prev => prev.map(token => {
+        const bal = userBalances.get(token.address);
+        return bal ? { ...token, userWalletBalance: bal } : token;
+      }));
+      
+      console.log('Wallet balances refreshed manually');
+    } catch (err) {
+      console.error('Manual balance refresh failed:', err);
+    }
+  };
+
+  // NEW: Gas estimation helper (exposed to UI)
+  const estimateTransactionGas = async (
+    operation: 'deposit' | 'withdraw',
+    tokenAddress: string,
+    amount: string
+  ) => {
+    try {
+      return await consulCreditsService.estimateGasForOperation(operation, tokenAddress, amount);
+    } catch (err) {
+      console.error('Gas estimation error:', err);
+      return { gasLimit: '200000', gasPrice: '2000000000', estimatedCostETH: '0.0004' };
+    }
+  };
+
+  // NEW: Get ENS + Native ETH balance
+  const [ensName, setEnsName] = useState<string | null>(null);
+  const [nativeETHBalance, setNativeETHBalance] = useState<string>('0');
+
+  useEffect(() => {
+    const loadENSAndNativeBalance = async () => {
+      if (!walletAddress) {
+        setEnsName(null);
+        setNativeETHBalance('0');
+        return;
+      }
+
+      try {
+        const [name, ethBal] = await Promise.all([
+          consulCreditsService.getENSName(walletAddress),
+          consulCreditsService.getNativeETHBalance(walletAddress)
+        ]);
+        setEnsName(name);
+        setNativeETHBalance(ethBal);
+      } catch (e) {
+        console.warn('ENS / ETH balance fetch failed:', e);
+      }
+    };
+
+    loadENSAndNativeBalance();
+  }, [walletAddress]);
 
   // Real-time Data Refresh for Consul Credits
   useEffect(() => {
@@ -718,6 +850,10 @@ const App: React.FC = () => {
               walletAddress={walletAddress}
               onSwitchNetwork={handleSwitchNetwork}
               onDeposit={handleDepositToken}
+              onWithdraw={handleWithdrawToken}
+              estimateGas={estimateTransactionGas}
+              ensName={ensName}
+              nativeETHBalance={nativeETHBalance}
             />
           );
       
@@ -784,7 +920,19 @@ const App: React.FC = () => {
         onMenuToggle={() => setIsMobileMenuOpen(true)}
         onToggleMockData={() => setUseMockData(!useMockData)}
         onToggleConsole={() => setIsConsoleOpen(prev => !prev)}
-      />  <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-3 sm:p-6">
+        isDemoMode={isDemoMode}
+      />
+      
+      {/* NEW: Demo Mode Banner for Vercel / No Backend */}
+      {isDemoMode && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/20 px-4 py-2 text-center">
+          <span className="text-yellow-400 text-sm font-medium">
+            🎭 Demo Mode — Running with mock data (No backend connection)
+          </span>
+        </div>
+      )}
+      
+      <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-3 sm:p-6">
           {error && <div className="bg-sov-red/20 text-sov-red p-3 sm:p-4 mb-4 rounded border border-sov-red/30 text-xs sm:text-sm font-bold tracking-tight">{error}</div>}
           <div key={activeView} className="animate-fade-in animate-slide-up">
             <ErrorBoundary>
