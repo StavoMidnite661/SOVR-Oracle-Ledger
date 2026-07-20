@@ -24,9 +24,9 @@ interface StripeComplianceViewProps {
 type ComplianceTab = 'overview' | 'checklist' | 'audit-logs' | 'reports' | 'risk-assessment' | 'documentation';
 
 export const StripeComplianceView: React.FC<StripeComplianceViewProps> = ({
-  complianceItems = mockComplianceItems,
-  auditLogs = mockAuditLogs,
-  achReturns = mockAchReturns,
+  complianceItems = [],
+  auditLogs = [],
+  achReturns = [],
 }) => {
   const [activeTab, setActiveTab] = useState<ComplianceTab>('overview');
   const [selectedTimeframe, setSelectedTimeframe] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
@@ -117,12 +117,7 @@ export const StripeComplianceView: React.FC<StripeComplianceViewProps> = ({
       completedItems: complianceMetrics.completedItems,
       highRiskItems: complianceMetrics.highRiskItems,
       auditLogsCount: auditLogs.length,
-      recommendations: [
-        'Complete pending KYC verification procedures',
-        'Review and update data retention policies',
-        'Enhance audit logging for sensitive operations',
-        'Schedule regular compliance training sessions',
-      ],
+      recommendations: [],
     };
 
     // In a real implementation, this would generate a PDF or download as CSV
@@ -465,26 +460,16 @@ export const StripeComplianceView: React.FC<StripeComplianceViewProps> = ({
             <div className="bg-sov-dark p-6 rounded-lg border border-gray-600">
               <h4 className="font-semibold text-sov-light mb-4">Recent Reports</h4>
               <div className="space-y-3">
-                {[
+                {[].map((_report, index) => (
+                  <div key={index} className="flex items-center justify-center p-8 bg-sov-dark-alt rounded-lg border border-dashed border-white/10">
+                    <p className="text-xs font-mono uppercase tracking-widest text-sov-light-alt">No recent reports found</p>
+                  </div>
+                ))}
+                {/* 
                   { name: 'Monthly Compliance Summary', date: '2024-03-01', type: 'Monthly', status: 'Completed' },
                   { name: 'PCI DSS Assessment Q1', date: '2024-02-28', type: 'Quarterly', status: 'Completed' },
                   { name: 'NACHA Audit Log', date: '2024-02-25', type: 'Weekly', status: 'Completed' },
-                ].map((report, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-sov-dark-alt rounded-lg">
-                    <div>
-                      <p className="font-semibold text-sov-light">{report.name}</p>
-                      <p className="text-sov-light-alt text-sm">{report.date} • {report.type}</p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="bg-sov-green/20 text-sov-green px-2 py-1 rounded-full text-xs font-semibold">
-                        {report.status}
-                      </span>
-                      <button className="text-sov-accent hover:text-sov-accent-hover transition-colors">
-                        Download
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                */}
               </div>
             </div>
           </div>
@@ -540,26 +525,17 @@ export const StripeComplianceView: React.FC<StripeComplianceViewProps> = ({
               <div className="bg-sov-dark p-6 rounded-lg border border-gray-600">
                 <h4 className="font-semibold text-sov-light mb-4">Risk Mitigation Actions</h4>
                 <div className="space-y-3">
-                  {[
+                  {[].map((_item, index) => (
+                    <div key={index} className="flex items-center justify-center p-6 bg-sov-dark-alt rounded-lg border border-dashed border-white/10">
+                      <p className="text-xs font-mono uppercase tracking-widest text-sov-light-alt">No pending mitigation actions</p>
+                    </div>
+                  ))}
+                  {/* 
                     { action: 'Implement enhanced monitoring for ACH returns', priority: 'High', status: 'In Progress' },
                     { action: 'Complete PCI DSS compliance training', priority: 'Medium', status: 'Pending' },
                     { action: 'Review and update security policies', priority: 'High', status: 'Completed' },
                     { action: 'Establish incident response procedures', priority: 'Medium', status: 'In Progress' },
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-sov-dark-alt rounded-lg">
-                      <div>
-                        <p className="font-semibold text-sov-light">{item.action}</p>
-                        <p className="text-sov-light-alt text-sm">{item.priority} Priority</p>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        item.status === 'Completed' ? 'bg-sov-green/20 text-sov-green' :
-                        item.status === 'In Progress' ? 'bg-sov-yellow/20 text-sov-yellow' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </div>
-                  ))}
+                  */}
                 </div>
               </div>
             </div>
@@ -757,81 +733,7 @@ export const StripeComplianceView: React.FC<StripeComplianceViewProps> = ({
   );
 };
 
-// Mock data
-const mockComplianceItems: ComplianceChecklistItem[] = [
-  {
-    id: '1',
-    checklistType: 'NACHA',
-    itemDescription: 'Verify customer authorization for ACH debits',
-    requirement: 'Maintain signed authorization for all ACH transactions',
-    status: 'completed',
-    regulatoryStandard: 'NACHA',
-    riskLevel: 'high',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-03-01'),
-  },
-  {
-    id: '2',
-    checklistType: 'PCI_DSS',
-    itemDescription: 'Secure cardholder data encryption',
-    requirement: 'All cardholder data must be encrypted in transit and at rest',
-    status: 'completed',
-    regulatoryStandard: 'PCI_DSS',
-    riskLevel: 'critical',
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date('2024-02-15'),
-  },
-  {
-    id: '3',
-    checklistType: 'AML',
-    itemDescription: 'Customer due diligence implementation',
-    requirement: 'Complete KYC verification for all new customers',
-    status: 'in_progress',
-    regulatoryStandard: 'AML',
-    riskLevel: 'medium',
-    createdAt: new Date('2024-02-01'),
-    updatedAt: new Date('2024-03-15'),
-  },
-];
-
-const mockAuditLogs: PciAuditLogEntry[] = [
-  {
-    id: '1',
-    actionType: 'CUSTOMER_DATA_ACCESSED',
-    tableName: 'stripe_customers',
-    recordId: 'cust_123',
-    userId: 'user_456',
-    userEmail: 'admin@oracle-ledger.com',
-    ipAddress: '192.168.1.100',
-    sensitiveFieldsAccessed: JSON.stringify(['email', 'phone', 'address']),
-    dataMasked: true,
-    accessPurpose: 'Customer support',
-    createdAt: new Date('2024-03-15T10:30:00Z'),
-  },
-  {
-    id: '2',
-    actionType: 'PAYMENT_METHOD_ADDED',
-    tableName: 'stripe_payment_methods',
-    recordId: 'pm_789',
-    userId: 'user_456',
-    userEmail: 'admin@oracle-ledger.com',
-    ipAddress: '192.168.1.100',
-    dataMasked: false,
-    createdAt: new Date('2024-03-15T09:15:00Z'),
-  },
-];
-
-const mockAchReturns: AchReturn[] = [
-  {
-    id: '1',
-    achPaymentId: 'payment_123',
-    returnCode: 'R01',
-    returnReason: 'Insufficient Funds',
-    returnedAt: new Date('2024-03-10'),
-    corrected: false,
-    createdAt: new Date('2024-03-10'),
-  },
-];
+// Purged Mock Data Section
 
 // Icon components
 // End of file

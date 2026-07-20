@@ -5,6 +5,10 @@ interface PayrollStubProps {
   employee: Employee;
   payPeriod: string;
   payDate: string;
+  address?: string;
+  bankRoutingNumber?: string;
+  bankAccountLast4?: string;
+  bankName?: string;
 }
 
 const StubRow: React.FC<{ label: string; current: number; ytd: number; isBold?: boolean }> = ({ label, current, ytd, isBold }) => (
@@ -49,19 +53,28 @@ export const PayrollStub: React.FC<PayrollStubProps> = ({ employee, payPeriod, p
         <h2 className="text-xl font-semibold">Pay Statement</h2>
       </header>
 
-      <section className="grid grid-cols-2 gap-8 my-6 text-xs">
-        <div>
-          <p className="font-bold">{employee.name}</p>
-          <p>Address on File</p>
-        </div>
-        <table className="w-full">
-          <tbody>
-            <tr><td className="font-bold pr-2">Pay Period:</td><td>{payPeriod}</td></tr>
-            <tr><td className="font-bold pr-2">Pay Date:</td><td>{payDate}</td></tr>
-            <tr><td className="font-bold pr-2">Employee ID:</td><td>{employee.id}</td></tr>
-          </tbody>
-        </table>
-      </section>
+       <section className="grid grid-cols-2 gap-8 my-6 text-xs">
+         <div>
+           <p className="font-bold">{employee.name}</p>
+           {address ? (
+             <p style={{ whiteSpace: 'pre-line' }}>{address}</p>
+           ) : (
+             <p>Address on File</p>
+           )}
+           {bankRoutingNumber && bankAccountLast4 && (
+             <p className="mt-2">
+               <span className="font-semibold">Direct Deposit:</span> {bankName || 'Bank'} • Routing: {bankRoutingNumber} • Account: ••••{bankAccountLast4}
+             </p>
+           )}
+         </div>
+         <table className="w-full">
+           <tbody>
+             <tr><td className="font-bold pr-2">Pay Period:</td><td>{payPeriod}</td></tr>
+             <tr><td className="font-bold pr-2">Pay Date:</td><td>{payDate}</td></tr>
+             <tr><td className="font-bold pr-2">Employee ID:</td><td>{employee.id}</td></tr>
+           </tbody>
+         </table>
+       </section>
 
       <section className="grid grid-cols-2 gap-12">
         <div>

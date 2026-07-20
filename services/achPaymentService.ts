@@ -6,6 +6,9 @@
 
 import Stripe from 'stripe';
 import { feeTrackingService, FeeCalculationRequest, FeeBreakdown } from './feeTrackingService.js';
+import { db } from '../server/db.js';
+import { achPayments, achReturns, paymentReconciliation, journalEntries } from '../shared/schema.js';
+import { eq, and, gte, lte, sql } from 'drizzle-orm';
 
 export interface AchPaymentRequest {
   customerId: string;
@@ -384,20 +387,40 @@ export class AchPaymentService {
     returnRate: number;
     feeByType: { [key: string]: number };
   }> {
-    // This would query the database for actual statistics
-    // For now, returning mock data structure
+    const payments = await db.select().from(achPayments).where(
+      and(
+        gte(achPayments.createdAt, startDate),
+        lte(achPayments.createdAt, endDate)
+      )
+    );
+
+    const totalPayments = payments.length;
+    const totalVolume = payments.reduce((sum, p) => sum + Number(p.amountCents), 0);
+    const totalFees = payments.reduce((sum, p) => {
+      const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+      return sum + (Number(metadata.total_fee_cents) || 0);
+    }, 0);
+
+    const successfulPayments = payments.filter(p => p.status === 'succeeded').length;
+    const returnedPayments = payments.filter(p => p.status === 'returned').length;
+
     return {
-      totalPayments: 2847,
-      totalVolume: 125000000, // $1,250,000
-      totalFees: 875000, // $8,750
-      averageFee: 307, // $3.07
-      successRate: 97.8, // 97.8%
-      returnRate: 2.2, // 2.2%
+      totalPayments,
+      totalVolume,
+      totalFees,
+      averageFee: totalPayments > 0 ? Math.round(totalFees / totalPayments) : 0,
+      successRate: totalPayments > 0 ? (successfulPayments / totalPayments) * 100 : 0,
+      returnRate: totalPayments > 0 ? (returnedPayments / totalPayments) * 100 : 0,
       feeByType: {
-        achProcessing: 450000,
-        bankFees: 175000,
-        compliance: 125000,
-        verification: 125000
+        achProcessing: payments.reduce((sum, p) => {
+          const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+          return sum + (Number(metadata.ach_fee_cents) || 0);
+        }, 0),
+        bankFees: payments.reduce((sum, p) => {
+          const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+          return sum + (Number(metadata.bank_fee_cents) || 0);
+        }, 0),
+        // Additional categories can be extracted from metadata if needed
       }
     };
   }
@@ -407,23 +430,38 @@ export class AchPaymentService {
   // ==============================
 
   private async saveAchPaymentRecord(data: any): Promise<any> {
-    // This would save to the database
-    // For now, returning a mock record
-    return {
-      id: `ach_${Date.now()}`,
-      ...data,
-      created_at: new Date(),
-      updated_at: new Date()
-    };
+    const [record] = await db.insert(achPayments).values({
+      stripeChargeId: data.stripeChargeId,
+      stripePaymentIntentId: data.stripePaymentIntentId,
+      customerId: data.customerId,
+      paymentMethodId: data.paymentMethodId,
+      amountCents: data.amountCents.toString(),
+      description: data.description,
+      purpose: data.purpose,
+      status: data.status,
+      paymentMethodType: data.paymentMethodType,
+      achClassCode: data.achClassCode,
+      scheduledDate: data.scheduledDate,
+      estimatedSettlementDate: data.estimatedSettlementDate,
+      stripeMetadata: JSON.stringify(data.feeBreakdown)
+    }).returning();
+    return record;
   }
 
   private async getAchPaymentById(id: string): Promise<any> {
-    // Database lookup
-    return null;
+    const [record] = await db.select().from(achPayments).where(eq(achPayments.id, id));
+    return record;
   }
 
   private async updateAchPaymentStatus(id: string, status: string, additionalData: any): Promise<void> {
-    // Database update
+    await db.update(achPayments)
+      .set({ 
+        status,
+        returnCode: additionalData.returnCode,
+        returnDescription: additionalData.returnReason,
+        updatedAt: new Date()
+      })
+      .where(eq(achPayments.id, id));
   }
 
   private calculateSettlementDate(): string {
@@ -451,7 +489,18 @@ export class AchPaymentService {
   }
 
   private async saveAchReturnRecord(data: any): Promise<any> {
-    return { id: `return_${Date.now()}`, ...data };
+    const [record] = await db.insert(achReturns).values({
+      achPaymentId: data.achPaymentId,
+      returnCode: data.returnCode,
+      returnReason: data.returnReason,
+      returnedAt: data.returnedAt,
+      corrected: data.corrected,
+      correctionDate: data.correctionDate ? new Date(data.correctionDate) : null,
+      adjustedAmountCents: data.adjustedAmountCents.toString(),
+      newPaymentDate: data.newPaymentDate,
+      notes: data.notes
+    }).returning();
+    return record;
   }
 
   private async createReturnFeeAdjustments(achPaymentId: string, returnFee: number, returnRecordId: string): Promise<void> {
@@ -514,8 +563,18 @@ export class AchPaymentService {
   }
 
   private async saveReconciliationRecord(reconciliation: AchReconciliationData): Promise<void> {
-    // Save to database
-    console.log('Saving reconciliation:', reconciliation);
+    await db.insert(paymentReconciliation).values({
+      stripeBalanceTransactionId: reconciliation.stripeBalanceTransactionId,
+      achPaymentId: reconciliation.achPaymentId,
+      amountCents: reconciliation.amount.toString(),
+      currency: 'USD',
+      netCents: reconciliation.netAmount.toString(),
+      feeCents: reconciliation.fee.toString(),
+      type: 'charge',
+      stripeStatus: reconciliation.status,
+      stripeCreated: reconciliation.processedDate,
+      reconciledAt: new Date()
+    });
   }
 
   private async logProcessingError(errorType: string, data: any): Promise<void> {

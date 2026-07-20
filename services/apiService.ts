@@ -10,6 +10,40 @@ import type {
   ConsulCreditsConfig
 } from '../types.js';
 
+// Direct Deposit Recipient and Bank Account types
+export interface DirectDepositRecipient {
+  id: string;
+  stripe_account_id: string;
+  employee_id?: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  date_of_birth?: string;
+  ssn_last4?: string;
+  address?: string;
+  verification_status: string;
+  account_status: string;
+  requires_verification: boolean;
+  created_at: string;
+}
+
+export interface DirectDepositBankAccount {
+  id: string;
+  recipient_id: string;
+  stripe_bank_account_id: string;
+  account_holder_name: string;
+  bank_name: string;
+  routing_number: string;
+  account_number_last4: string;
+  account_type: string;
+  currency?: string;
+  status: string;
+  is_verified: boolean;
+  is_default: boolean;
+  created_at: string;
+}
+
 const API_BASE_URL = '/api';
 
 class ApiService {
@@ -159,12 +193,22 @@ class ApiService {
     });
   }
   
-  // Consul Credits
-  async getConsulCreditsConfig(): Promise<ConsulCreditsConfig> {
-    return this.fetchApi<ConsulCreditsConfig>('/consul-credits/config');
-  }
+   // Consul Credits
+   async getConsulCreditsConfig(): Promise<ConsulCreditsConfig> {
+     return this.fetchApi<ConsulCreditsConfig>('/consul-credits/config');
+   }
 
-  // ConsulCredits Transactions
+   // Direct Deposit Recipients
+   async getDirectDepositRecipients(verifiedOnly: boolean = false): Promise<DirectDepositRecipient[]> {
+     const url = verifiedOnly ? '/direct-deposit/recipients?verified=true' : '/direct-deposit/recipients';
+     return this.fetchApi<DirectDepositRecipient[]>(url);
+   }
+
+   async getDirectDepositBankAccounts(recipientId: string): Promise<DirectDepositBankAccount[]> {
+     return this.fetchApi<DirectDepositBankAccount[]>(`/direct-deposit/recipients/${recipientId}/bank-accounts`);
+   }
+
+   // ConsulCredits Transactions
   async getConsulCreditsTransactions(): Promise<ConsulCreditsTransaction[]> {
     return this.fetchApi<ConsulCreditsTransaction[]>('/consul-credits-transactions');
   }
@@ -494,6 +538,31 @@ class ApiService {
     return this.fetchApi('/stripe/reconciliation/unreconciled');
   }
 
+  // Compliance & Regulatory
+  async getComplianceStandards(): Promise<any[]> {
+    return this.fetchApi<any[]>('/compliance/standards');
+  }
+
+  async getRegulatoryRequirements(): Promise<any[]> {
+    return this.fetchApi<any[]>('/compliance/requirements');
+  }
+
+  async getRegulatoryChanges(): Promise<any[]> {
+    return this.fetchApi<any[]>('/compliance/changes');
+  }
+
+  async getComplianceGaps(): Promise<any[]> {
+    return this.fetchApi<any[]>('/compliance/gaps');
+  }
+
+  async getCompliancePolicies(): Promise<any[]> {
+    return this.fetchApi<any[]>('/compliance/policies');
+  }
+
+  async getReconciliationRecords(): Promise<any[]> {
+    return this.fetchApi<any[]>('/reconciliation');
+  }
+
   // Stripe & Compliance Data Fetching
   async getStripeCustomers(): Promise<any[]> {
     return this.fetchApi<{customers: any[]}>('/stripe/customers').then(res => res.customers || []);
@@ -517,6 +586,21 @@ class ApiService {
 
   async getAchReturns(): Promise<any[]> {
     return this.fetchApi<{returns: any[]}>('/stripe/ach/returns').then(res => res.returns || []);
+  }
+
+  async executePayouts(payload: {
+    amountCents: number;
+    currency: string;
+    recipientId: string;
+    messageType: string;
+    purpose?: string;
+    reference?: string;
+    invoiceId?: string;
+  }): Promise<{ success: boolean; result?: any; error?: string }> {
+    return this.fetchApi('/stripe/payouts/execute', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   // Stripe Transaction Management

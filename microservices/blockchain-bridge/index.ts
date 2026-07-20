@@ -4,6 +4,9 @@ import { db } from '../../server/db.js';
 import * as schema from '../../shared/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import type { ConsulCreditsTransaction, ConsulCreditsConfig } from '../../types.js';
+import { ConsulCreditsService } from '../../services/consulCreditsService.js';
+
+const consulCreditsService = new ConsulCreditsService();
 
 const app = express();
 const PORT = process.env.BLOCKCHAIN_BRIDGE_PORT || 3004;
@@ -80,21 +83,19 @@ app.post('/api/consul-credits-transactions', async (req, res) => {
   }
 });
 
-// GET /api/consul-credits/config
-app.get('/api/consul-credits/config', async (req, res) => {
+// Helper to get config
+async function getConsulCreditsConfig() {
   try {
     const configs = await db.select().from(schema.consulCreditsConfig).limit(1);
     
     if (configs.length > 0) {
       let config = configs[0];
-      console.log('[Blockchain] Loaded config from DB:', JSON.stringify(config, null, 2));
       
       // Auto-migrate to Base Mainnet if it's still on Sepolia (any variant) or uses the old broken contract
       const STALE_ADDRESS = '0x18042545890dd72c4023EE8eb22B14bAbb034666';
       const CORRECT_ADDRESS = '0x65e75d0fc656a2e81ef17e9a2a8da58d82390422'; // usdSOVR on Base
 
       if (config.networkName.includes('Sepolia') || config.chainId === 11155111 || config.contractAddress === STALE_ADDRESS) {
-        console.log('[Blockchain] Auto-migrating config/Fixing Stale Address to Base Mainnet...');
         try {
           const [updated] = await db.update(schema.consulCreditsConfig)
             .set({
@@ -107,42 +108,110 @@ app.get('/api/consul-credits/config', async (req, res) => {
               updatedAt: new Date()
             })
             .where(eq(schema.consulCreditsConfig.id, config.id))
-            .returning();
-            
-          if (updated) {
-            config = updated;
-            console.log('[Blockchain] Migration successful. New Config:', JSON.stringify(config, null, 2));
-          }
+              .returning();
+              
+          if (updated) config = updated;
         } catch (err) {
           console.error('[Blockchain] Migration failed:', err);
         }
       }
-
-      res.json(config);
-    } else {
-      const defaultConfig = {
-        isEnabled: process.env.CONSUL_CREDITS_ENABLED === 'true' || true,
-        networkName: process.env.CONSUL_CREDITS_NETWORK || 'Base Mainnet',
-        chainId: parseInt(process.env.CONSUL_CREDITS_CHAIN_ID || '8453'),
-        contractAddress: process.env.CONSUL_CREDITS_CONTRACT || '0x65e75d0fc656a2e81ef17e9a2a8da58d82390422', // usdSOVR on Base
-        rpcUrl: '/api/rpc', // Use local proxy to avoid CORS
-        oracleIntegratorAddress: process.env.ORACLE_INTEGRATOR_ADDRESS || '0x3d48e2Ea68bdadaF3Dd02fD8dcbB0a01c39c4133',
-        confirmationsRequired: parseInt(process.env.CONSUL_CREDITS_CONFIRMATIONS || '3')
-      };
-      res.json(defaultConfig);
+      return config;
     }
+  } catch (err) {
+    console.warn('[Blockchain] Could not fetch config from DB, falling back to ENV variables. Error:', err.message);
+  }
+  
+  return {
+    isEnabled: process.env.CONSUL_CREDITS_ENABLED === 'true' || true,
+    networkName: process.env.CONSUL_CREDITS_NETWORK || 'Base Mainnet',
+    chainId: parseInt(process.env.CONSUL_CREDITS_CHAIN_ID || '8453'),
+    contractAddress: process.env.CONSUL_CREDITS_CONTRACT || '0x65e75d0fc656a2e81ef17e9a2a8da58d82390422',
+    rpcUrl: '/api/rpc',
+    oracleIntegratorAddress: process.env.ORACLE_INTEGRATOR_ADDRESS || '0x3d48e2Ea68bdadaF3Dd02fD8dcbB0a01c39c4133',
+    confirmationsRequired: parseInt(process.env.CONSUL_CREDITS_CONFIRMATIONS || '3')
+  };
+}
+
+// GET /api/consul-credits/config
+app.get('/api/consul-credits/config', async (req, res) => {
+  try {
+    const config = await getConsulCreditsConfig();
+    res.json(config);
   } catch (error) {
     console.error('Error fetching consul credits config:', error);
-    const fallbackConfig = {
-      isEnabled: true,
-      networkName: 'Base Mainnet',
-      chainId: 8453,
-      contractAddress: '0x65e75d0fc656a2e81ef17e9a2a8da58d82390422', // usdSOVR on Base
-      rpcUrl: '/api/rpc', // Use local proxy to avoid CORS
-      oracleIntegratorAddress: '0x3d48e2Ea68bdadaF3Dd02fD8dcbB0a01c39c4133',
-      confirmationsRequired: 3
-    };
-    res.json(fallbackConfig);
+    res.status(500).json({ error: 'Failed to fetch config' });
+  }
+});
+
+// --- Oracle Operations ---
+
+// POST /api/consul-credits/mint
+app.post('/api/consul-credits/mint', async (req, res) => {
+  try {
+    const { toAddress, amount, ledgerReference } = req.body;
+    const signerKey = process.env.ORACLE_INTEGRATOR_PRIVATE_KEY || process.env.BLOCKCHAIN_SIGNER_KEY;
+
+    if (!signerKey) {
+      return res.status(500).json({ error: 'Signer key not configured on server' });
+    }
+
+    // Ensure service is initialized
+    if (!consulCreditsService.isInitialized()) {
+      const config = await getConsulCreditsConfig();
+      await consulCreditsService.initialize(config);
+    }
+
+    console.log(`[Blockchain] Sovereign Mint: ${amount} usdSOVR to ${toAddress} (Ref: ${ledgerReference})`);
+    const txHash = await consulCreditsService.sovereignMint(toAddress, amount, ledgerReference, signerKey);
+    
+    res.json({ success: true, txHash, ledgerReference });
+  } catch (error: any) {
+    console.error('Error in sovereign mint:', error);
+    res.status(500).json({ error: 'Failed to mint credits', details: error.message });
+  }
+});
+
+// POST /api/consul-credits/burn
+app.post('/api/consul-credits/burn', async (req, res) => {
+  try {
+    const { amount, ledgerReference } = req.body;
+    const signerKey = process.env.ORACLE_INTEGRATOR_PRIVATE_KEY || process.env.BLOCKCHAIN_SIGNER_KEY;
+
+    if (!signerKey) {
+      return res.status(500).json({ error: 'Signer key not configured on server' });
+    }
+
+    if (!consulCreditsService.isInitialized()) {
+      const config = await getConsulCreditsConfig();
+      await consulCreditsService.initialize(config);
+    }
+
+    console.log(`[Blockchain] Sovereign Burn: ${amount} usdSOVR (Ref: ${ledgerReference})`);
+    // Burns from the owner's balance — no fromAddress needed, burn() burns from caller
+    const txHash = await consulCreditsService.sovereignBurn(amount, ledgerReference, signerKey);
+    
+    res.json({ success: true, txHash, ledgerReference });
+  } catch (error: any) {
+    console.error('Error in sovereign burn:', error);
+    res.status(500).json({ error: 'Failed to burn credits', details: error.message });
+  }
+});
+
+// GET /api/consul-credits/balance/:address
+app.get('/api/consul-credits/balance/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    
+    if (!consulCreditsService.isInitialized()) {
+      const config = await getConsulCreditsConfig();
+      await consulCreditsService.initialize(config);
+    }
+
+    const balance = await consulCreditsService.getUserBalance(address);
+    res.json({ balance });
+  } catch (error: any) {
+    console.error('Error fetching balance:', error);
+    res.status(500).json({ error: 'Failed to fetch balance', details: error.message });
   }
 });
 

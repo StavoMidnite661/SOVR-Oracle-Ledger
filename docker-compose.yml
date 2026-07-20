@@ -1,0 +1,100 @@
+services:
+  # 1. Database
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=ORACLE-LEDGER
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=sovr
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-schema.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - oracle-net
+
+  # 2. Ledger Core (Auth & Core Logic)
+  ledger-core:
+    build: .
+    command: tsx microservices/ledger-core/index.ts
+    environment:
+      - DATABASE_URL=postgresql://postgres:sovr@db:5432/ORACLE-LEDGER
+      - LEDGER_SERVICE_PORT=3001
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    ports:
+      - "3001:3001"
+    depends_on:
+      - db
+    networks:
+      - oracle-net
+
+  # 3. API Gateway
+  gateway:
+    build: .
+    command: tsx microservices/gateway/index.ts
+    environment:
+      - PORT=3002
+      - LEGACY_API_URL=http://ledger-core:3001
+      - LEDGER_SERVICE_URL=http://ledger-core:3001
+      - RISK_SERVICE_URL=http://risk-service:3003
+      - BLOCKCHAIN_SERVICE_URL=http://chain-service:3004
+      - PAYMENT_SERVICE_URL=http://payment-service:3005
+    ports:
+      - "3002:3002"
+    depends_on:
+      - ledger-core
+    networks:
+      - oracle-net
+
+  # 4. Risk & Compliance Service
+  risk-service:
+    build: .
+    command: tsx microservices/risk-compliance/index.ts
+    environment:
+      - PORT=3003
+      - DATABASE_URL=postgresql://postgres:sovr@db:5432/ORACLE-LEDGER
+    ports:
+      - "3003:3003"
+    depends_on:
+      - db
+    networks:
+      - oracle-net
+
+  # 5. Blockchain Bridge Service
+  chain-service:
+    build: .
+    command: tsx microservices/blockchain-bridge/index.ts
+    environment:
+      - PORT=3004
+      - DATABASE_URL=postgresql://postgres:sovr@db:5432/ORACLE-LEDGER
+      - ETHEREUM_RPC_URL=${ETHEREUM_RPC_URL}
+    ports:
+      - "3004:3004"
+    depends_on:
+      - db
+    networks:
+      - oracle-net
+
+  # 6. Payment Gateway Service
+  payment-service:
+    build: .
+    command: tsx microservices/payment-gateway/index.ts
+    environment:
+      - PORT=3005
+      - DATABASE_URL=postgresql://postgres:sovr@db:5432/ORACLE-LEDGER
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    ports:
+      - "3005:3005"
+    depends_on:
+      - db
+    networks:
+      - oracle-net
+
+volumes:
+  postgres_data:
+
+networks:
+  oracle-net:
+    driver: bridge

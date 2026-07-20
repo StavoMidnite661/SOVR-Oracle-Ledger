@@ -289,75 +289,7 @@ export class ISO20022Service {
     }
   }
 
-  /**
-   * Generate a sample CAMT.053 XML for testing/demo purposes.
-   */
-  static generateSampleCAMT053(): string {
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
-  <BkToCstmrStmt>
-    <GrpHdr>
-      <MsgId>CAMT053-SAMPLE-001</MsgId>
-      <CreDtTm>2025-03-15T12:00:00</CreDtTm>
-      <MsgRcpt>
-        <Nm>SOVR Development Holdings LLC</Nm>
-        <Id><OrgId><Othr><Id>SOVRDHL</Id></Othr></OrgId></Id>
-      </MsgRcpt>
-    </GrpHdr>
-    <Stmt>
-      <Id>STMT-20250315</Id>
-      <ElctrncSeqNb>1</ElctrncSeqNb>
-      <CreDtTm>2025-03-15T23:59:59</CreDtTm>
-      <Acct>
-        <Id><Othr><Id>0123456789</Id></Othr></Id>
-        <Ccy>USD</Ccy>
-      </Acct>
-      <Bal>
-        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
-        <Amt Ccy="USD">50000.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <Dt><Dt>2025-03-15</Dt></Dt>
-      </Bal>
-      <Bal>
-        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
-        <Amt Ccy="USD">52250.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <Dt><Dt>2025-03-15</Dt></Dt>
-      </Bal>
-      <Ntry>
-        <Amt Ccy="USD">1500.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <Sts>BOOK</Sts>
-        <BookgDt><Dt>2025-03-15</Dt></BookgDt>
-        <ValDt><Dt>2025-03-15</Dt></ValDt>
-        <NtryDtls>
-          <TxDtls>
-            <Refs><EndToEndId>INV-2025-001</EndToEndId></Refs>
-            <AmtDtls><TxAmt><Amt Ccy="USD">1500.00</Amt></TxAmt></AmtDtls>
-            <RltdPties><Dbtr><Nm>Acme Corp</Nm></Dbtr></RltdPties>
-            <RmtInf><Ustrd>Invoice payment INV-2025-001</Ustrd></RmtInf>
-          </TxDtls>
-        </NtryDtls>
-      </Ntry>
-      <Ntry>
-        <Amt Ccy="USD">750.00</Amt>
-        <CdtDbtInd>CRDT</CdtDbtInd>
-        <Sts>BOOK</Sts>
-        <BookgDt><Dt>2025-03-15</Dt></BookgDt>
-        <ValDt><Dt>2025-03-15</Dt></ValDt>
-        <NtryDtls>
-          <TxDtls>
-            <Refs><EndToEndId>SUB-2025-042</EndToEndId></Refs>
-            <AmtDtls><TxAmt><Amt Ccy="USD">750.00</Amt></TxAmt></AmtDtls>
-            <RltdPties><Dbtr><Nm>Jane Smith Industries</Nm></Dbtr></RltdPties>
-            <RmtInf><Ustrd>Subscription payment Q1 2025</Ustrd></RmtInf>
-          </TxDtls>
-        </NtryDtls>
-      </Ntry>
-    </Stmt>
-  </BkToCstmrStmt>
-</Document>`;
-  }
+
 }
 
 // Singleton export

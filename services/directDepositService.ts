@@ -6,6 +6,9 @@
 
 import Stripe from 'stripe';
 import { feeTrackingService, FeeCalculationRequest, FeeBreakdown } from './feeTrackingService.js';
+import { db } from '../server/db.js';
+import { directDepositPayouts, directDepositRecipients, paymentReconciliation } from '../shared/schema.js';
+import { eq, and, gte, lte } from 'drizzle-orm';
 
 export interface DirectDepositRequest {
   recipientId: string; // Stripe Connect account ID
@@ -444,27 +447,41 @@ export class DirectDepositService {
     feeByType: { [key: string]: number };
     purposeBreakdown: { [key: string]: { count: number; volume: number; fees: number } };
   }> {
-    // Mock data - would query database
+    const payouts = await db.select().from(directDepositPayouts).where(
+      and(
+        gte(directDepositPayouts.createdAt, startDate),
+        lte(directDepositPayouts.createdAt, endDate)
+      )
+    );
+
+    const totalDeposits = payouts.length;
+    const totalVolume = payouts.reduce((sum, p) => sum + Number(p.amountCents), 0);
+    const totalFees = payouts.reduce((sum, p) => {
+      const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+      return sum + (Number(metadata.total_fee_cents) || 0);
+    }, 0);
+
+    const successfulPayouts = payouts.filter(p => p.status === 'paid').length;
+
     return {
-      totalDeposits: 892,
-      totalVolume: 125000000, // $1,250,000
-      totalFees: 89200, // $892.00
-      averageDeposit: 140134, // $1,401.34
-      averageFee: 100, // $1.00
-      successRate: 99.2,
-      processingTime: 2.3, // 2.3 days average
+      totalDeposits,
+      totalVolume,
+      totalFees,
+      averageDeposit: totalDeposits > 0 ? Math.round(totalVolume / totalDeposits) : 0,
+      averageFee: totalDeposits > 0 ? Math.round(totalFees / totalDeposits) : 0,
+      successRate: totalDeposits > 0 ? (successfulPayouts / totalDeposits) * 100 : 0,
+      processingTime: 2, // Average estimation
       feeByType: {
-        payoutFees: 53400, // $534.00
-        bankFees: 22300, // $223.00
-        verificationFees: 8900, // $89.00
-        complianceFees: 4600 // $46.00
+        payoutFees: payouts.reduce((sum, p) => {
+          const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+          return sum + (Number(metadata.payout_fee_cents) || 0);
+        }, 0),
+        bankFees: payouts.reduce((sum, p) => {
+          const metadata = p.stripeMetadata ? JSON.parse(p.stripeMetadata) : {};
+          return sum + (Number(metadata.bank_fee_cents) || 0);
+        }, 0)
       },
-      purposeBreakdown: {
-        salary: { count: 756, volume: 118000000, fees: 75600 },
-        bonus: { count: 89, volume: 4450000, fees: 8900 },
-        reimbursement: { count: 34, volume: 1850000, fees: 3400 },
-        contractor_payment: { count: 13, volume: 650000, fees: 1300 }
-      }
+      purposeBreakdown: {} // Can be populated if needed
     };
   }
 
@@ -483,12 +500,20 @@ export class DirectDepositService {
   }
 
   private async saveDirectDepositRecord(data: any): Promise<any> {
-    return {
-      id: `dd_${Date.now()}`,
-      ...data,
-      created_at: new Date(),
-      updated_at: new Date()
-    };
+    const [record] = await db.insert(directDepositPayouts).values({
+      stripePayoutId: data.stripePayoutId,
+      recipientId: data.recipientId,
+      amountCents: data.amountCents.toString(),
+      description: data.description,
+      payPeriodStart: data.payPeriodStart,
+      payPeriodEnd: data.payPeriodEnd,
+      scheduledPayoutDate: data.scheduledDate,
+      status: data.status,
+      stripeMetadata: JSON.stringify(data.feeBreakdown),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    return record;
   }
 
   private async saveBatchRecord(data: any): Promise<string> {
@@ -497,8 +522,8 @@ export class DirectDepositService {
   }
 
   private async getDirectDepositById(id: string): Promise<any> {
-    // Database lookup
-    return null;
+    const [record] = await db.select().from(directDepositPayouts).where(eq(directDepositPayouts.id, id));
+    return record;
   }
 
   private determineVolumeTier(totalAmount: number): 'low' | 'medium' | 'high' | 'enterprise' {
@@ -554,7 +579,18 @@ export class DirectDepositService {
   }
 
   private async saveDirectDepositReconciliationRecord(reconciliation: DirectDepositReconciliationData): Promise<void> {
-    console.log('Saving direct deposit reconciliation:', reconciliation);
+    await db.insert(paymentReconciliation).values({
+      stripeBalanceTransactionId: reconciliation.stripePayoutId, // Using payout ID as proxy if BT not available
+      directDepositPayoutId: reconciliation.directDepositId,
+      amountCents: reconciliation.amount.toString(),
+      currency: 'USD',
+      netCents: reconciliation.netAmount.toString(),
+      feeCents: reconciliation.fee.toString(),
+      type: 'payout',
+      stripeStatus: reconciliation.status,
+      stripeCreated: reconciliation.arrivalDate,
+      reconciledAt: new Date()
+    });
   }
 
   private async getHistoricalFeeAverages(paymentType: string): Promise<{ [key: string]: number }> {

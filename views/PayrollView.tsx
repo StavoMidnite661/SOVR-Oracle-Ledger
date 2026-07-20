@@ -3,6 +3,7 @@ import type { Employee, JournalEntry, JournalEntryLine, DirectDepositPayout } fr
 import { Modal } from '../components/shared/Modal.js';
 import { ModalButton, ModalInput, ModalLabel, ModalSelect, ModalSection } from '../components/shared/ModalElements.js';
 import { PayrollStub } from '../components/payroll/PayrollStub.js';
+import { apiService, type DirectDepositRecipient, type DirectDepositBankAccount } from '../services/apiService.js';
 
 interface PayrollViewProps {
   employees: Employee[];
@@ -44,7 +45,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const runPayrollLabel = `Run ${currentMonthName} ${currentYear} Payroll`;
   const [isAddEmployeeModalOpen, setIsAddEmployeeModalOpen] = useState(false);
   const [isConfirmPayrollModalOpen, setIsConfirmPayrollModalOpen] = useState(false);
-  const [selectedEmployeeForStub, setSelectedEmployeeForStub] = useState<Employee | null>(null);
+  const [selectedEmployeeForStub, setSelectedEmployeeForStub] = useState<{employee: Employee; address?: string; bankRoutingNumber?: string; bankAccountLast4?: string; bankName?: string} | null>(null);
   const [name, setName] = useState('');
   const [annualSalary, setAnnualSalary] = useState<number | ''>('');
   const [bankRoutingNumber, setBankRoutingNumber] = useState('');
@@ -169,18 +170,46 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     setStateWithholding('');
   };
 
-  const handleEditEmployee = (employee: Employee) => {
-    setSelectedEmployeeForEdit(employee);
-    setEditName(employee.name);
-    setEditAnnualSalary(employee.annualSalary);
-    setEditBankRoutingNumber(employee.bankRoutingNumber || '');
-    setEditBankAccountNumber(employee.bankAccountNumber || '');
-    setEditPaymentMethod(employee.paymentMethod || 'ACH');
-    setEditTaxId(employee.taxId || '');
-    setIsEditEmployeeModalOpen(true);
-  };
+   const handleEditEmployee = (employee: Employee) => {
+     setSelectedEmployeeForEdit(employee);
+     setEditName(employee.name);
+     setEditAnnualSalary(employee.annualSalary);
+     setEditBankRoutingNumber(employee.bankRoutingNumber || '');
+     setEditBankAccountNumber(employee.bankAccountNumber || '');
+     setEditPaymentMethod(employee.paymentMethod || 'ACH');
+     setEditTaxId(employee.taxId || '');
+     setIsEditEmployeeModalOpen(true);
+   };
 
-  const handleSaveEditEmployee = (e: React.FormEvent) => {
+   const handleViewStub = async (employee: Employee) => {
+     try {
+       // Fetch direct deposit recipient for this employee
+       const recipients = await apiService.getDirectDepositRecipients();
+       const recipient = recipients.find(r => r.employee_id === employee.id);
+       
+       let address, bankRoutingNumber, bankAccountLast4, bankName;
+       
+       if (recipient) {
+         address = recipient.address;
+         // Fetch bank accounts for this recipient
+         const bankAccounts = await apiService.getDirectDepositBankAccounts(recipient.id);
+         // Prefer verified and default account
+         const bank = bankAccounts.find(b => b.is_verified && b.is_default) || bankAccounts[0];
+         if (bank) {
+           bankRoutingNumber = bank.routing_number;
+           bankAccountLast4 = bank.account_number_last4;
+           bankName = bank.bank_name;
+         }
+       }
+       
+       setSelectedEmployeeForStub({ employee, address, bankRoutingNumber, bankAccountLast4, bankName });
+     } catch (error) {
+       console.error('Failed to load direct deposit info for stub:', error);
+       setSelectedEmployeeForStub({ employee });
+     }
+   };
+
+   const handleSaveEditEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEmployeeForEdit || !editName || !editAnnualSalary || Number(editAnnualSalary) <= 0) return;
     
@@ -485,11 +514,11 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                       className="bg-sov-gold/20 text-sov-gold text-xs font-bold py-1 px-3 rounded-lg hover:bg-sov-gold/30 transition-colors">
                       Edit
                     </button>
-                    <button 
-                      onClick={() => setSelectedEmployeeForStub(emp)}
-                      className="bg-sov-accent/20 text-sov-accent text-xs font-bold py-1 px-3 rounded-lg hover:bg-sov-accent/30 transition-colors">
-                      Stub
-                    </button>
+                     <button 
+                       onClick={() => handleViewStub(emp)}
+                       className="bg-sov-accent/20 text-sov-accent text-xs font-bold py-1 px-3 rounded-lg hover:bg-sov-accent/30 transition-colors">
+                       Stub
+                     </button>
                   </td>
                 </tr>
               ))}
@@ -661,16 +690,20 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         </div>
       </Modal>
 
-      <Modal isOpen={!!selectedEmployeeForStub} onClose={() => setSelectedEmployeeForStub(null)} title={`Pay Statement for ${selectedEmployeeForStub?.name}`} maxWidth="max-w-4xl">
-        {selectedEmployeeForStub && (
-            <div id="payroll-stub-printable" className="bg-white text-black p-4 rounded-sm">
-                <PayrollStub
-                    employee={selectedEmployeeForStub}
-                    payPeriod={payPeriodString}
-                    payDate={payDateString}
-                />
-            </div>
-        )}
+       <Modal isOpen={!!selectedEmployeeForStub} onClose={() => setSelectedEmployeeForStub(null)} title={`Pay Statement for ${selectedEmployeeForStub?.employee.name}`} maxWidth="max-w-4xl">
+         {selectedEmployeeForStub && (
+             <div id="payroll-stub-printable" className="bg-white text-black p-4 rounded-sm">
+                 <PayrollStub
+                     employee={selectedEmployeeForStub.employee}
+                     payPeriod={payPeriodString}
+                     payDate={payDateString}
+                     address={selectedEmployeeForStub.address}
+                     bankRoutingNumber={selectedEmployeeForStub.bankRoutingNumber}
+                     bankAccountLast4={selectedEmployeeForStub.bankAccountLast4}
+                     bankName={selectedEmployeeForStub.bankName}
+                 />
+             </div>
+         )}
         <div className="flex justify-end pt-6 space-x-3 mt-4 border-t border-white/5">
             <p className="text-xs text-sov-light-alt mr-auto self-center">
               Tip: Use "Save as PDF" in the print dialog to download.

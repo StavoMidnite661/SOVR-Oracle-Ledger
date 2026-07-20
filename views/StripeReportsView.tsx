@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { mockAchPayments, mockDirectDepositPayouts, mockReconciliationEntries, mockStripeCustomers } from '../constants.js';
 import { KpiCard } from '../components/shared/KpiCard.js';
 import type { AchPayment, DirectDepositPayout, PaymentReconciliationEntry, StripeCustomer } from '../types.js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -27,10 +26,10 @@ interface StripeReportsViewProps {
 type ReportsTab = 'payments' | 'reconciliation' | 'customers' | 'tax-regulatory' | 'analytics' | 'exports';
 
 export const StripeReportsView: React.FC<StripeReportsViewProps> = ({
-  achPayments = mockAchPayments,
-  directDepositPayouts = mockDirectDepositPayouts,
-  reconciliationEntries = mockReconciliationEntries,
-  customers = mockStripeCustomers,
+  achPayments = [],
+  directDepositPayouts = [],
+  reconciliationEntries = [],
+  customers = [],
 }) => {
   const [activeTab, setActiveTab] = useState<ReportsTab>('payments');
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d');

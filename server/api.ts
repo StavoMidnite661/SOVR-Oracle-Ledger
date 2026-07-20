@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import { db } from './db.js';
+import { db } from './db.ts';
 import bodyParser from 'body-parser';
-import * as schema from '../shared/schema.js';
+import * as schema from '../shared/schema.ts';
 import { eq, desc, and } from 'drizzle-orm';
 import type { 
   Employee, 
@@ -196,6 +196,7 @@ app.get('/api/employees', async (req, res) => {
     const data = await db.select().from(schema.employees).orderBy(desc(schema.employees.createdAt));
     res.json(data.map(convertDbEmployee));
   } catch (error) {
+    console.error('Employees query error:', error);
     res.status(500).json({ error: 'Failed to fetch employees' });
   }
 });
@@ -395,9 +396,69 @@ app.post('/api/logs/batch', async (req, res) => {
   }
 });
 
+// Compliance & Regulatory
+app.get('/api/compliance/standards', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.complianceStandards).orderBy(desc(schema.complianceStandards.createdAt));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch compliance standards' });
+  }
+});
+
+app.get('/api/compliance/requirements', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.regulatoryRequirements).orderBy(desc(schema.regulatoryRequirements.createdAt));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch regulatory requirements' });
+  }
+});
+
+app.get('/api/compliance/changes', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.regulatoryChanges).orderBy(desc(schema.regulatoryChanges.announcementDate));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch regulatory changes' });
+  }
+});
+
+app.get('/api/compliance/gaps', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.complianceGaps).orderBy(desc(schema.complianceGaps.identifiedDate));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch compliance gaps' });
+  }
+});
+
+app.get('/api/compliance/policies', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.compliancePolicies).orderBy(desc(schema.compliancePolicies.createdAt));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch compliance policies' });
+  }
+});
+
+app.get('/api/reconciliation', async (req, res) => {
+  try {
+    const data = await db.select().from(schema.paymentReconciliation).orderBy(desc(schema.paymentReconciliation.createdAt));
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch reconciliation records' });
+  }
+});
+
+// Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API is working', data: [1, 2, 3] });
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', service: 'Ledger Core & Auth' });
+  res.json({ status: 'OK', service: 'Ledger Core & Auth', testData: [1, 2, 3] });
 });
 
 const PORT = process.env.API_PORT || 3001;
