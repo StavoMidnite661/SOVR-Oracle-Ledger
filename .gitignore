@@ -895,3 +895,35 @@
 # uploads/
 # downloads/
 
+# AI Agent folders (not needed in repo)
+.claude/
+.claude-flow/
+.swarm/
+.idx/
+
+# Documentation and scripts (not needed in repo)
+docs/
+scripts/
+
+# Test and config files (not needed in repo)
+testplan.md
+usdSOVR_base.json
+vendor_test.json
+hardhat.config.cjs
+.mcp.json
+
+# Smart contract flattened files
+ConsulCreditsWrapper_Flat.sol
+
+# Log files
+*.log
+logs/
+
+# Debug/temp files
+payment_cd
+test-db-connection.js
+update_docs.js
+
+# Task files
+task.md
+

@@ -29,6 +29,25 @@ const getStatusColor = (status: Vendor['status']) => {
   }
 };
 
+// NEW: Compliance colors
+const getRiskColor = (risk?: string) => {
+  switch (risk) {
+    case 'Low': return 'bg-sov-green/20 text-sov-green';
+    case 'Medium': return 'bg-sov-gold/20 text-sov-gold';
+    case 'High': return 'bg-sov-red/20 text-sov-red';
+    default: return 'bg-gray-500/20 text-gray-400';
+  }
+};
+
+const getW9Color = (status?: string) => {
+  switch (status) {
+    case 'Received': return 'bg-sov-green/20 text-sov-green';
+    case 'Pending': return 'bg-sov-gold/20 text-sov-gold';
+    case 'Expired': return 'bg-sov-red/20 text-sov-red';
+    default: return 'bg-gray-500/20 text-gray-400';
+  }
+};
+
 const getCategoryColor = (category: Vendor['category']) => {
   switch (category) {
     case 'Software': return 'bg-blue-500/20 text-blue-400';
@@ -70,6 +89,12 @@ export const VendorManagementView: React.FC<VendorManagementViewProps> = ({ vend
   const [status, setStatus] = useState<Vendor['status']>('Active');
   const [category, setCategory] = useState<Vendor['category']>('Other');
   const [notes, setNotes] = useState('');
+  
+  // NEW: Compliance fields
+  const [taxClassification, setTaxClassification] = useState<'Individual' | 'C-Corp' | 'S-Corp' | 'LLC' | 'Partnership' | 'Trust'>('Individual');
+  const [w9Status, setW9Status] = useState<'Pending' | 'Received' | 'Expired'>('Pending');
+  const [riskRating, setRiskRating] = useState<'Low' | 'Medium' | 'High'>('Low');
+  const [paymentTermsDays, setPaymentTermsDays] = useState<number>(30);
 
   const filteredAndSortedVendors = useMemo(() => {
     let filtered = vendors.filter(vendor => {
@@ -145,6 +170,11 @@ export const VendorManagementView: React.FC<VendorManagementViewProps> = ({ vend
       status,
       category,
       notes: notes || undefined,
+      // NEW compliance fields
+      taxClassification,
+      w9Status,
+      riskRating,
+      paymentTermsDays,
     });
     
     setIsNewVendorModalOpen(false);
@@ -283,6 +313,9 @@ export const VendorManagementView: React.FC<VendorManagementViewProps> = ({ vend
                 <th className="p-3 cursor-pointer" onClick={() => requestSort('status')}>
                   <div className="flex items-center">Status <SortIndicator direction={getSortDirection('status')} /></div>
                 </th>
+                {/* NEW: Compliance Columns */}
+                <th className="p-3 text-center">Risk</th>
+                <th className="p-3 text-center">W-9</th>
                 <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -310,6 +343,17 @@ export const VendorManagementView: React.FC<VendorManagementViewProps> = ({ vend
                   <td className="p-3">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(vendor.status)}`}>
                       {vendor.status}
+                    </span>
+                  </td>
+                  {/* NEW: Compliance columns */}
+                  <td className="p-3">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getRiskColor(vendor.riskRating)}`}>
+                      {vendor.riskRating || 'N/A'}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getW9Color(vendor.w9Status)}`}>
+                      {vendor.w9Status || 'Pending'}
                     </span>
                   </td>
                   <td className="p-3 text-center">

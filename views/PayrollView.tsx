@@ -52,6 +52,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const [bankAccountNumber, setBankAccountNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'ACH' | 'Wire' | 'Crypto'>('ACH');
   const [taxId, setTaxId] = useState('');
+  
+  // NEW: Enhanced employee fields for compliance
+  const [status, setStatus] = useState<'Active' | 'Terminated' | 'On Leave'>('Active');
+  const [payFrequency, setPayFrequency] = useState<'Weekly' | 'Bi-Weekly' | 'Semi-Monthly' | 'Monthly'>('Monthly');
+  const [federalWithholding, setFederalWithholding] = useState<number | ''>('');
+  const [stateWithholding, setStateWithholding] = useState<number | ''>('');
   const [payrollMethod, setPayrollMethod] = useState<'ACH' | 'Stripe Connect'>('Stripe Connect');
   
   const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState<Employee | null>(null);
@@ -143,7 +149,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       bankRoutingNumber: bankRoutingNumber || undefined,
       bankAccountNumber: bankAccountNumber || undefined,
       paymentMethod,
-      taxId: taxId || undefined
+      taxId: taxId || undefined,
+      // NEW compliance fields
+      status,
+      payFrequency,
+      federalWithholding: federalWithholding ? Number(federalWithholding) : undefined,
+      stateWithholding: stateWithholding ? Number(stateWithholding) : undefined
     });
     
     setIsAddEmployeeModalOpen(false);
@@ -153,6 +164,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     setBankAccountNumber('');
     setPaymentMethod('ACH');
     setTaxId('');
+    setStatus('Active');
+    setPayFrequency('Monthly');
+    setFederalWithholding('');
+    setStateWithholding('');
   };
 
    const handleEditEmployee = (employee: Employee) => {
@@ -434,6 +449,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
               <tr>
                 <th className="p-3 cursor-pointer" onClick={() => requestSort('id')}><div className="flex items-center">Employee ID <SortIndicator direction={getSortDirection('id')} /></div></th>
                 <th className="p-3 cursor-pointer" onClick={() => requestSort('name')}><div className="flex items-center">Name <SortIndicator direction={getSortDirection('name')} /></div></th>
+                <th className="p-3 text-center">Status</th>
+                <th className="p-3 text-center">Pay Freq</th>
                 <th className="p-3 text-center">Payment Method</th>
                 <th className="p-3 text-center">Account Info</th>
                 <th className="p-3 text-center">Stripe Connect</th>
@@ -471,15 +488,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     }
                   </td>
                   <td className="p-3 text-center">
-                    {emp.bankAccountNumber && emp.bankRoutingNumber ? (
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-sov-green/20 text-sov-green">
-                        Ready
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-sov-red/20 text-sov-red">
-                        Setup Required
-                      </span>
-                    )}
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      emp.status === 'Active' ? 'bg-sov-green/20 text-sov-green' :
+                      emp.status === 'Terminated' ? 'bg-sov-red/20 text-sov-red' :
+                      'bg-sov-gold/20 text-sov-gold'
+                    }`}>
+                      {emp.status || 'Active'}
+                    </span>
+                  </td>
+                  <td className="p-3 text-center text-xs">
+                    {emp.payFrequency || 'Monthly'}
                   </td>
                   <td className="p-3 text-right font-mono">${emp.annualSalary.toLocaleString()}</td>
                   <td className="p-3 text-right font-mono">${(emp.annualSalary / 12).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
@@ -544,6 +562,38 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           <div>
             <ModalLabel htmlFor="taxId">Tax ID / SSN</ModalLabel>
             <ModalInput type="text" id="taxId" value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="XXX-XX-XXXX" />
+          </div>
+          
+          {/* NEW: Compliance Fields */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <ModalLabel htmlFor="status">Employment Status</ModalLabel>
+              <ModalSelect id="status" value={status} onChange={e => setStatus(e.target.value as any)}>
+                <option value="Active">Active</option>
+                <option value="Terminated">Terminated</option>
+                <option value="On Leave">On Leave</option>
+              </ModalSelect>
+            </div>
+            <div>
+              <ModalLabel htmlFor="payFrequency">Pay Frequency</ModalLabel>
+              <ModalSelect id="payFrequency" value={payFrequency} onChange={e => setPayFrequency(e.target.value as any)}>
+                <option value="Weekly">Weekly</option>
+                <option value="Bi-Weekly">Bi-Weekly</option>
+                <option value="Semi-Monthly">Semi-Monthly</option>
+                <option value="Monthly">Monthly</option>
+              </ModalSelect>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <ModalLabel htmlFor="federalWithholding">Federal Withholding %</ModalLabel>
+              <ModalInput type="number" id="federalWithholding" value={federalWithholding} onChange={e => setFederalWithholding(e.target.valueAsNumber || '')} placeholder="22" />
+            </div>
+            <div>
+              <ModalLabel htmlFor="stateWithholding">State Withholding %</ModalLabel>
+              <ModalInput type="number" id="stateWithholding" value={stateWithholding} onChange={e => setStateWithholding(e.target.valueAsNumber || '')} placeholder="5" />
+            </div>
           </div>
           <div className="flex justify-end pt-6 space-x-3">
             <ModalButton type="button" variant="secondary" onClick={() => setIsAddEmployeeModalOpen(false)}>Cancel</ModalButton>

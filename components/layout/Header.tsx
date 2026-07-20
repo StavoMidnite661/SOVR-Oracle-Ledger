@@ -7,6 +7,7 @@ interface HeaderProps {
     isConsoleOpen: boolean;
     onMenuToggle?: () => void;
     onToggleConsole?: () => void;
+    isDemoMode?: boolean; // NEW: For Vercel / fallback indicator
 }
 
 export const Header: React.FC<HeaderProps> = ({ 

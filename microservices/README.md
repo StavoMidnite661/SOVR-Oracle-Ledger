@@ -1,28 +1,32 @@
-# Microservices Architecture
+# Microservices
 
-This directory contains the source code for the ORACLE-LEDGER microservices.
+This directory contains the individual microservices that make up the Oracle Ledger backend.
 
 ## Services
 
-### 1. Gateway (`gateway/`)
-The entry point for all client requests. It handles routing, basic rate limiting, and initial authentication checks before proxying requests to the appropriate service.
+| Service | Description | Port |
+|---------|-------------|------|
+| `gateway/` | API Gateway with routing, rate limiting, and security | 3002 |
+| `risk-compliance/` | Risk assessment, PCI audit logging, compliance tools | 3003 |
+| `blockchain-bridge/` | Base Mainnet integration and Consul Credits | 3004 |
+| `payment-gateway/` | Stripe integration and ACH processing | 3005 |
+| `bank-connector/` | Traditional banking rails integration | 3007 |
 
-### 2. Auth Service (`auth-service/`)
-Manages user identities, authentication (JWT), and authorization (RBAC).
+## Architecture Notes
 
-### 3. Ledger Core (`ledger-core/`)
-The heart of the accounting system. Manages Accounts, Journal Entries, Invoices, and general bookkeeping.
+- All services communicate via the internal `oracle-net` Docker network.
+- Services use environment variables for configuration.
+- The `gateway` service acts as the single entry point for external traffic.
 
-### 4. Payment Gateway (`payment-gateway/`)
-Handles all external money movement. Integrates with Stripe for Credit Cards, ACH, and Direct Deposits.
+## Running Individually
 
-### 5. Risk & Compliance (`risk-compliance/`)
-The "Watchdog" service. Handles Fraud Detection, PCI Audit Logging, and Regulatory Compliance (NACHA/SOX) reporting.
+You can start a single service using:
 
-### 6. Blockchain Bridge (`blockchain-bridge/`)
-Connects the off-chain Ledger to the on-chain Consul Credits smart contract.
+```bash
+docker compose up <service-name>
+```
 
-## Development
-
-Each service is a self-contained Node.js/Express application.
-To start the entire suite, use the `start-microservices.sh` script in the root directory (coming soon).
+Example:
+```bash
+docker compose up gateway
+```

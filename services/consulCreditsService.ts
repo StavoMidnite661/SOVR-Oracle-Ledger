@@ -546,8 +546,8 @@ export class ConsulCreditsService {
     return this.config;
   }
 
-  /**
-   * Connect to browser wallet (MetaMask/Phantom)
+  /** 
+   * Connect to browser wallet (MetaMask/Phantom/Rabby/Coinbase)
    */
   async connectWallet(): Promise<string> {
     if (typeof window === 'undefined' || !(window as any).ethereum) {
@@ -555,16 +555,126 @@ export class ConsulCreditsService {
     }
 
     try {
-      // Request account access
+      // Request account access with proper eth_requestAccounts
       const browserProvider = new ethers.BrowserProvider((window as any).ethereum);
+      
+      // Explicitly request accounts (better UX)
+      await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+      
       this.signer = await browserProvider.getSigner();
       this.walletAddress = await this.signer.getAddress();
       
       console.log('Wallet connected:', this.walletAddress);
       return this.walletAddress;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to connect wallet:', error);
+      
+      // Better error messages
+      if (error.code === 4001) {
+        throw new Error('Connection rejected by user.');
+      }
       throw error;
+    }
+  }
+
+  // ============================================
+  // NEW: Gas Estimation + ENS + Native Balance
+  // ============================================
+
+  /**
+   * Estimate gas for a transaction (deposit or withdraw)
+   */
+  async estimateGasForOperation(
+    operation: 'deposit' | 'withdraw',
+    tokenAddress: string,
+    amount: string
+  ): Promise<{ gasLimit: string; gasPrice: string; estimatedCostETH: string }> {
+    if (!this.signer || !this.provider) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      const decimals = 18; // most tokens
+      const amountParsed = ethers.parseUnits(amount, decimals);
+
+      let txRequest: any;
+
+      if (operation === 'deposit') {
+        // Simulate approve + deposit
+        const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, this.signer);
+        const spender = this.config?.contractAddress;
+
+        // Estimate approve
+        const approveGas = await tokenContract.approve.estimateGas(spender, amountParsed).catch(() => 60000n);
+        
+        // Estimate deposit
+        const contractWithSigner = this.contract!.connect(this.signer);
+        const depositGas = await (contractWithSigner as any).depositToken.estimateGas(tokenAddress, amountParsed, 'gas-estimate').catch(() => 150000n);
+
+        const totalGas = approveGas + depositGas;
+        const feeData = await this.provider.getFeeData();
+        const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+
+        const estimatedCost = totalGas * gasPrice;
+        const costETH = ethers.formatEther(estimatedCost);
+
+        return {
+          gasLimit: totalGas.toString(),
+          gasPrice: gasPrice.toString(),
+          estimatedCostETH: costETH
+        };
+      } else {
+        // Withdraw estimation
+        const contractWithSigner = this.contract!.connect(this.signer);
+        const withdrawGas = await (contractWithSigner as any).withdrawToken.estimateGas(tokenAddress, amountParsed, 'gas-estimate').catch(() => 120000n);
+
+        const feeData = await this.provider.getFeeData();
+        const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
+
+        const estimatedCost = withdrawGas * gasPrice;
+        const costETH = ethers.formatEther(estimatedCost);
+
+        return {
+          gasLimit: withdrawGas.toString(),
+          gasPrice: gasPrice.toString(),
+          estimatedCostETH: costETH
+        };
+      }
+    } catch (error) {
+      console.warn('Gas estimation failed, using defaults:', error);
+      return {
+        gasLimit: '200000',
+        gasPrice: ethers.parseUnits('2', 'gwei').toString(),
+        estimatedCostETH: '0.0004'
+      };
+    }
+  }
+
+  /**
+   * Get ENS name for the connected address (if available)
+   */
+  async getENSName(address: string): Promise<string | null> {
+    if (!this.provider) return null;
+
+    try {
+      const name = await this.provider.lookupAddress(address);
+      return name;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get native ETH balance of connected wallet
+   */
+  async getNativeETHBalance(address: string): Promise<string> {
+    if (!this.provider) return '0';
+
+    try {
+      const balance = await this.provider.getBalance(address);
+      return ethers.formatEther(balance);
+    } catch {
+      return '0';
     }
   }
 

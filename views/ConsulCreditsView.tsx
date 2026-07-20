@@ -35,6 +35,10 @@ interface ConsulCreditsViewProps {
   onSwitchNetwork?: (chainId: number) => void;
   onDeposit?: (tokenAddress: string, amount: string) => Promise<void>;
   onWithdraw?: (tokenAddress: string, amount: string) => Promise<void>;
+  // NEW: Gas estimation + ENS + Native balance
+  estimateGas?: (operation: 'deposit' | 'withdraw', tokenAddress: string, amount: string) => Promise<any>;
+  ensName?: string | null;
+  nativeETHBalance?: string;
 }
 
 const DepositModal: React.FC<{
@@ -226,6 +230,16 @@ const DepositModal: React.FC<{
                   <span className="text-white/40">Contract</span>
                   <span className="font-mono text-sov-light/70 bg-white/5 px-2 py-0.5 rounded text-[10px]">{config.contractAddress.slice(0, 6)}...{config.contractAddress.slice(-4)}</span>
                 </div>
+                
+                {/* NEW: Gas Estimate Display */}
+                {gasEstimate && (
+                  <div className="flex justify-between items-center pt-1 border-t border-white/10 mt-1">
+                    <span className="text-white/40">Est. Gas</span>
+                    <span className="font-mono text-sov-light/70 text-[10px]">
+                      ~{parseFloat(gasEstimate.estimatedCostETH).toFixed(5)} ETH
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -485,6 +499,16 @@ const WithdrawModal: React.FC<{
                     <span className="font-medium">Base Mainnet</span>
                   </span>
                 </div>
+                
+                {/* NEW: Gas Estimate for Withdraw */}
+                {gasEstimate && (
+                  <div className="flex justify-between items-center pt-1 border-t border-white/10 mt-1">
+                    <span className="text-white/40">Est. Gas</span>
+                    <span className="font-mono text-sov-light/70 text-[10px]">
+                      ~{parseFloat(gasEstimate.estimatedCostETH).toFixed(5)} ETH
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -603,9 +627,13 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ConsulCreditsTransaction['status']>('all');
   
-  // Deposit Modal State
+  // Deposit / Withdraw Modal State
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [selectedToken, setSelectedToken] = useState<SupportedToken | null>(null);
+
+  // NEW: Gas estimation state
+  const [gasEstimate, setGasEstimate] = useState<any>(null);
 
   const handleDepositClick = (token: SupportedToken) => {
     setSelectedToken(token);
@@ -778,7 +806,19 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
                     ? 'bg-sov-accent/10 border-sov-accent/30 text-sov-accent hover:bg-sov-red/10 hover:border-sov-red/30 hover:text-sov-red group/wallet' 
                     : 'bg-sov-light/10 border-sov-light/20 text-sov-light hover:bg-sov-light/20'
                 }`}
+                title={walletAddress ? "Click to disconnect wallet" : "Connect your Web3 wallet"}
               >
+                {/* NEW: Show ENS + ETH balance when connected */}
+                {walletAddress && ensName && (
+                  <span className="text-[10px] font-mono text-sov-accent mr-1 hidden md:inline">
+                    {ensName}
+                  </span>
+                )}
+                {walletAddress && nativeETHBalance && parseFloat(nativeETHBalance) > 0 && (
+                  <span className="text-[10px] font-mono text-white/60 mr-2 hidden md:inline">
+                    {parseFloat(nativeETHBalance).toFixed(4)} ETH
+                  </span>
+                )}
                 <div className={`w-2 h-2 rounded-full ${walletAddress ? 'bg-sov-accent group-hover/wallet:bg-sov-red shadow-[0_0_8px_rgba(78,205,196,0.5)]' : 'bg-sov-light-alt'}`}></div>
                 <span className="text-xs font-bold uppercase tracking-wider">
                   {walletAddress ? (
@@ -1052,7 +1092,17 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
                        >
                          Deposit
                        </button>
-                       <button className="px-3 py-1.5 bg-sov-dark border border-white/5 text-sov-light text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-all">
+                       <button 
+                         onClick={() => {
+                           setSelectedToken(token);
+                           // Note: Withdraw modal is handled separately below
+                           // For now we trigger withdraw via a different state if needed
+                           // Since WithdrawModal is defined, we can open it similarly
+                           // This button now opens withdraw modal
+                           setIsWithdrawModalOpen(true);
+                         }}
+                         className="px-3 py-1.5 bg-sov-dark border border-white/5 text-sov-light text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-white/5 transition-all"
+                       >
                          Withdraw
                        </button>
                     </div>
@@ -1254,6 +1304,21 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
             return await onDeposit(selectedToken.address, amount);
           }
           throw new Error('Deposit function not available');
+        }}
+      />
+
+      {/* Withdraw Modal - Now fully wired */}
+      <WithdrawModal
+        isOpen={isWithdrawModalOpen}
+        onClose={() => setIsWithdrawModalOpen(false)}
+        token={selectedToken}
+        config={config}
+        userConsulCreditsBalance={selectedToken ? '0' : undefined} // Could be enhanced with CC balance
+        onConfirm={async (amount) => {
+          if (onWithdraw && selectedToken) {
+            return await onWithdraw(selectedToken.address, amount);
+          }
+          throw new Error('Withdraw function not available');
         }}
       />
     </div>

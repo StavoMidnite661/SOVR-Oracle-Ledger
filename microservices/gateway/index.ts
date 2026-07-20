@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 
+// Import security middleware
+import { securityHeaders, apiRateLimiter, sanitizeRequest } from '../../middleware/security.js';
+
 // Configuration
 const GATEWAY_PORT = process.env.GATEWAY_PORT || 3002;
 const LEGACY_API_URL = process.env.LEGACY_API_URL || 'http://localhost:3001';
@@ -13,12 +16,21 @@ const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || 'http://localhost
 const SERVICES = {
   AUTH: LEGACY_API_URL,
   LEDGER: LEGACY_API_URL,
-  BLOCKCHAIN: BLOCKCHAIN_SERVICE_URL, // Migrated
-  PAYMENT: PAYMENT_SERVICE_URL,       // Migrated
-  RISK: RISK_SERVICE_URL              // Migrated
+  BLOCKCHAIN: BLOCKCHAIN_SERVICE_URL,
+  PAYMENT: PAYMENT_SERVICE_URL,
+  RISK: RISK_SERVICE_URL
 };
 
 const app = express();
+
+// ============================================
+// SECURITY MIDDLEWARE (Enterprise Grade)
+// ============================================
+app.use(securityHeaders);
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(sanitizeRequest);
+app.use(apiRateLimiter);
 
 // Helper to proxy requests
 const proxyRequest = (targetUrl: string) => {

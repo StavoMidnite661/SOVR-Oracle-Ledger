@@ -31,11 +31,21 @@ export interface JournalEntry {
   description: string;
   lines: JournalEntryLine[];
   source: 'CHAIN' | 'NACHA' | 'PO' | 'AR' | 'AP' | 'PURCHASE' | 'PAYROLL' | 'INTERCOMPANY' | 'PAYMENT';
-  status: 'Posted' | 'Pending';
-  vendorId?: string; // Link to specific vendor
-  txHash?: string; // Blockchain transaction hash if from chain
-  blockNumber?: number; // Block number if from chain
-  chainConfirmations?: number; // Number of confirmations
+  status: 'Posted' | 'Pending' | 'Approved' | 'Voided';
+  vendorId?: string;
+  txHash?: string;
+  blockNumber?: number;
+  chainConfirmations?: number;
+  
+  // === AUDIT & COMPLIANCE FIELDS (NEW) ===
+  createdBy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  referenceDocument?: string;           // Invoice #, Receipt, Contract, etc.
+  memo?: string;                        // Additional notes per entry
+  reversalOf?: string;                  // ID of the original entry this reverses
+  attachmentUrl?: string;               // Link to supporting document
+  taxCode?: string;                     // For 1099 / tax reporting
 }
 
 export interface PurchaseOrder {
@@ -65,6 +75,20 @@ export interface Employee {
     bankAccountNumber?: string;
     paymentMethod?: 'ACH' | 'Wire' | 'Crypto';
     taxId?: string;
+    
+    // === NEW COMPLIANCE FIELDS ===
+    status?: 'Active' | 'Terminated' | 'On Leave' | 'Suspended';
+    payFrequency?: 'Weekly' | 'Bi-Weekly' | 'Semi-Monthly' | 'Monthly';
+    federalWithholding?: number;        // Percentage or fixed amount
+    stateWithholding?: number;
+    localWithholding?: number;
+    ytdGross?: number;
+    ytdNet?: number;
+    ytdDeductions?: number;
+    employmentStartDate?: string;
+    employmentEndDate?: string;
+    taxFormStatus?: 'W4_Received' | 'W9_Received' | 'Pending';
+    deductions?: Array<{ type: string; amount: number }>; // 401k, health, etc.
 }
 
 export interface PayrollRun {
@@ -90,6 +114,16 @@ export interface Vendor {
     category: 'Software' | 'Hardware' | 'Services' | 'Supplies' | 'Professional' | 'Other';
     notes?: string;
     createdDate: string;
+    
+    // === NEW COMPLIANCE FIELDS ===
+    taxClassification?: 'Individual' | 'C-Corp' | 'S-Corp' | 'LLC' | 'Partnership' | 'Trust';
+    w9Status?: 'Received' | 'Pending' | 'Expired';
+    w9ReceivedDate?: string;
+    riskRating?: 'Low' | 'Medium' | 'High';
+    paymentTermsDays?: number;
+    creditLimit?: number;
+    bankingVerified?: boolean;
+    lastVerificationDate?: string;
 }
 
 export interface CardNumber {
@@ -137,6 +171,14 @@ export interface CardTransaction {
   journalEntryId?: string;
   approvedBy?: string;
   notes?: string;
+  
+  // === NEW: Expense Tracking & Audit Fields ===
+  policyViolation?: boolean;
+  policyViolationReason?: string;
+  reimbursementStatus?: 'Not Submitted' | 'Pending' | 'Approved' | 'Reimbursed';
+  submittedBy?: string;
+  approvedAt?: string;
+  receiptFileName?: string;
 }
 
 export interface SpendingRule {

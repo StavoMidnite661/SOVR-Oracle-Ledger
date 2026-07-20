@@ -47,10 +47,13 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const [amount, setAmount] = useState<number | ''>('');
   const [source, setSource] = useState<JournalEntry['source']>('PURCHASE');
   const [vendorId, setVendorId] = useState<string>('');
+  const [referenceDocument, setReferenceDocument] = useState(''); // NEW
+  const [memo, setMemo] = useState(''); // NEW
   const [error, setError] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'date', direction: 'descending' });
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'ach' | 'stripe' | 'nacha' | 'intercompany'>('all');
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  const [approvalComment, setApprovalComment] = useState(''); // NEW for approval workflow
 
   const filteredAndSortedJournalEntries = useMemo(() => {
     let filteredItems = [...journalEntries];
@@ -151,6 +154,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
     setAmount('');
     setSource('PURCHASE');
     setVendorId('');
+    setReferenceDocument('');
+    setMemo('');
     setError('');
   };
 
@@ -165,11 +170,16 @@ export const JournalView: React.FC<JournalViewProps> = ({
       return;
     }
     setError('');
+    
+    // NEW: Include audit fields
     addJournalEntry({
       description,
       source,
-      status: 'Posted',
+      status: 'Pending', // Changed to Pending for approval workflow
       vendorId: vendorId || undefined,
+      referenceDocument: referenceDocument || undefined,
+      memo: memo || undefined,
+      createdBy: 'current-user', // In real app: from auth context
       lines: [
         { accountId: debitAccountId, type: 'DEBIT', amount: +amount },
         { accountId: creditAccountId, type: 'CREDIT', amount: +amount },
@@ -182,6 +192,20 @@ export const JournalView: React.FC<JournalViewProps> = ({
   const getSortDirection = (key: SortableKeys) => {
     if (!sortConfig || sortConfig.key !== key) return undefined;
     return sortConfig.direction;
+  };
+
+  // NEW: Approval / Void workflow
+  const handleApproveEntry = (entryId: string) => {
+    // In a real app, this would call an API to update the entry
+    console.log(`Approving journal entry ${entryId} with comment: ${approvalComment}`);
+    // For demo, we'll just close the modal
+    setSelectedEntry(null);
+    setApprovalComment('');
+  };
+
+  const handleVoidEntry = (entryId: string) => {
+    console.log(`Voiding journal entry ${entryId}`);
+    setSelectedEntry(null);
   };
 
   return (
@@ -265,7 +289,10 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     </td>
                     <td className="p-3">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        entry.status === 'Posted' ? 'bg-sov-green/20 text-sov-green' : 'bg-sov-gold/20 text-sov-gold'
+                        entry.status === 'Posted' ? 'bg-sov-green/20 text-sov-green' :
+                        entry.status === 'Approved' ? 'bg-sov-accent/20 text-sov-accent' :
+                        entry.status === 'Voided' ? 'bg-sov-red/20 text-sov-red' :
+                        'bg-sov-gold/20 text-sov-gold'
                       }`}>
                         {entry.status}
                       </span>
@@ -347,6 +374,29 @@ export const JournalView: React.FC<JournalViewProps> = ({
                        placeholder="e.g. Monthly Server Costs"
                        className="text-lg font-medium"
                      />
+                   </div>
+                   {/* NEW: Reference Document & Memo for Audit Trail */}
+                   <div className="grid grid-cols-2 gap-4">
+                     <div>
+                       <ModalLabel htmlFor="referenceDocument">Reference Document</ModalLabel>
+                       <ModalInput 
+                         type="text" 
+                         id="referenceDocument" 
+                         value={referenceDocument} 
+                         onChange={e => setReferenceDocument(e.target.value)} 
+                         placeholder="INV-2025-001 or Receipt #123"
+                       />
+                     </div>
+                     <div>
+                       <ModalLabel htmlFor="memo">Memo / Notes</ModalLabel>
+                       <ModalInput 
+                         type="text" 
+                         id="memo" 
+                         value={memo} 
+                         onChange={e => setMemo(e.target.value)} 
+                         placeholder="Additional context for audit"
+                       />
+                     </div>
                    </div>
                    <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -533,7 +583,21 @@ export const JournalView: React.FC<JournalViewProps> = ({
               return null;
             })()}
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-2 space-x-3">
+              {selectedEntry.status === 'Pending' && (
+                <>
+                  <ModalButton 
+                    variant="secondary" 
+                    onClick={() => handleVoidEntry(selectedEntry.id)}
+                    className="bg-red-500/10 text-red-400 border-red-500/30"
+                  >
+                    Void Entry
+                  </ModalButton>
+                  <ModalButton onClick={() => handleApproveEntry(selectedEntry.id)}>
+                    Approve Entry
+                  </ModalButton>
+                </>
+              )}
               <ModalButton variant="secondary" onClick={() => setSelectedEntry(null)}>Close Details</ModalButton>
             </div>
           </div>
