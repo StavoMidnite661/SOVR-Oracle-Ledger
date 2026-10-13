@@ -233,6 +233,7 @@ export enum View {
   StripeCompliance = 'STRIPE_COMPLIANCE',
   StripeReports = 'STRIPE_REPORTS',
   ISO20022 = 'ISO20022',
+  AutonomousSettlement = 'AUTONOMOUS_SETTLEMENT',
   Settings = 'SETTINGS',
 }
 

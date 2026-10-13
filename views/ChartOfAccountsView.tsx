@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { CHART_OF_ACCOUNTS } from '../constants.js';
 import { AccountType, Entity } from '../types.js';
-import type { JournalEntry } from '../types.js';
+import type { JournalEntry, Account } from '../types.js';
 
 interface ChartOfAccountsViewProps {
   journalEntries: JournalEntry[];

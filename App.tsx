@@ -18,7 +18,10 @@ import { StripeReportsView } from './views/StripeReportsView.js';
 import { PayrollView } from './views/PayrollView.js';
 import { SettingsView } from './views/SettingsView.js';
 import { ISO20022View } from './views/ISO20022View.js';
-import { CHART_OF_ACCOUNTS, DEFAULT_SETTINGS, CONSUL_CREDITS_CONFIG } from './constants.js';
+import { AutonomousSettlementView } from './views/AutonomousSettlementView.js';
+import { CHART_OF_ACCOUNTS, DEFAULT_SETTINGS, CONSUL_CREDITS_CONFIG, mockJournalEntries, mockPurchaseOrders, mockInvoices, mockEmployees, mockVendors, mockCompanyCards, mockCardTransactions, mockStripeCustomers, mockAchPayments, mockDirectDepositPayouts } from './constants.js';
+import { mockConfig, mockSupportedTokens, mockTransactions, mockStats } from './mockData.js';
+import { loggingService } from './services/loggingService.js';
 import type { JournalEntry, PurchaseOrder, Invoice, Employee, Vendor, CompanyCard, CardTransaction, ConsulCreditsConfig, SupportedToken, ConsulCreditsTransaction, ConsulCreditsStats, StripeCustomer, AchPayment, DirectDepositPayout, AppSettings } from './types.js';
 import { View } from './types.js';
 import { Modal } from './components/shared/Modal.js';
@@ -61,7 +64,8 @@ const App: React.FC = () => {
   const [pciAuditLogs, setPciAuditLogs] = useState<any[]>([]);
   const [achReturns, setAchReturns] = useState<any[]>([]);
 
-  const useMockData = false; // Hard-enforced Live Mode
+  const [useMockData, setUseMockData] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -155,11 +159,13 @@ const App: React.FC = () => {
     } catch (err) { setError('Failed to add vendor'); }
   };
 
-  const updateVendor = async (updatedVendor: Vendor) => {
+  const updateVendor = async (vendorId: string, updates: Partial<Vendor>) => {
     if (useMockData) return;
     try {
-      const updated = await apiService.updateVendor(updatedVendor);
-      setVendors(prev => prev.map(v => (v.id === updatedVendor.id ? updated : v)));
+      const fullVendor = vendors.find(v => v.id === vendorId);
+      if (!fullVendor) return;
+      const updated = await apiService.updateVendor({ ...fullVendor, ...updates });
+      setVendors(prev => prev.map(v => (v.id === vendorId ? updated : v)));
     } catch (err) { setError('Failed to update vendor'); }
   };
 
@@ -366,6 +372,13 @@ const App: React.FC = () => {
           setComplianceChecklist(getValue(results[12], []));
           setPciAuditLogs(getValue(results[13], []));
           setAchReturns(getValue(results[14], []));
+
+          // Check if core API calls failed (e.g. backend offline or running static on Vercel)
+          const coreIndices = [0, 1, 2, 3, 4, 5, 6];
+          const coreFailures = coreIndices.filter(idx => results[idx].status === 'rejected');
+          if (coreFailures.length >= 4) {
+            throw new Error('Backend API unavailable. Activating Demo Mode fallback.');
+          }
 
           // Log failures for debugging
           results.forEach((res, idx) => {
@@ -886,6 +899,13 @@ const App: React.FC = () => {
       />;
       
       case View.ISO20022: return <ISO20022View achPayments={achPayments} />;
+      case View.AutonomousSettlement: return <AutonomousSettlementView 
+        journalEntries={journalEntries}
+        arInvoices={arInvoices}
+        apInvoices={apInvoices}
+        intercompanyPayableBalance={intercompanyPayableBalance}
+        addJournalEntry={addJournalEntry}
+      />;
       
       case View.Payroll: return <PayrollView 
         employees={employees} 

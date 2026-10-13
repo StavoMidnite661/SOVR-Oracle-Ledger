@@ -33,8 +33,8 @@ interface ConsulCreditsViewProps {
   onConnectWallet?: () => void;
   walletAddress?: string | null;
   onSwitchNetwork?: (chainId: number) => void;
-  onDeposit?: (tokenAddress: string, amount: string) => Promise<void>;
-  onWithdraw?: (tokenAddress: string, amount: string) => Promise<void>;
+  onDeposit?: (tokenAddress: string, amount: string) => Promise<string>;
+  onWithdraw?: (tokenAddress: string, amount: string) => Promise<string>;
   // NEW: Gas estimation + ENS + Native balance
   estimateGas?: (operation: 'deposit' | 'withdraw', tokenAddress: string, amount: string) => Promise<any>;
   ensName?: string | null;
@@ -47,7 +47,8 @@ const DepositModal: React.FC<{
   token: SupportedToken | null;
   onConfirm: (amount: string) => Promise<string>;
   config: ConsulCreditsConfig;
-}> = ({ isOpen, onClose, token, onConfirm, config }) => {
+  gasEstimate?: any;
+}> = ({ isOpen, onClose, token, onConfirm, config, gasEstimate }) => {
   const [step, setStep] = useState<'INPUT' | 'REVIEW' | 'SIGNING' | 'SUCCESS'>('INPUT');
   const [amount, setAmount] = useState('');
   const [txHash, setTxHash] = useState('');
@@ -321,7 +322,8 @@ const WithdrawModal: React.FC<{
   onConfirm: (amount: string) => Promise<string>;
   config: ConsulCreditsConfig;
   userConsulCreditsBalance?: string;
-}> = ({ isOpen, onClose, token, onConfirm, config, userConsulCreditsBalance }) => {
+  gasEstimate?: any;
+}> = ({ isOpen, onClose, token, onConfirm, config, userConsulCreditsBalance, gasEstimate }) => {
   const [step, setStep] = useState<'INPUT' | 'REVIEW' | 'SIGNING' | 'SUCCESS'>('INPUT');
   const [amount, setAmount] = useState('');
   const [txHash, setTxHash] = useState('');
@@ -621,7 +623,11 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
   walletAddress,
 
   onSwitchNetwork,
-  onDeposit
+  onDeposit,
+  onWithdraw,
+  estimateGas,
+  ensName,
+  nativeETHBalance
 }) => {
   const [activeTab, setActiveTab] = useState<ConsulCreditsTab>('overview');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1295,6 +1301,7 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
 
       
       <DepositModal
+        gasEstimate={gasEstimate}
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
         token={selectedToken}
@@ -1309,6 +1316,7 @@ export const ConsulCreditsView: React.FC<ConsulCreditsViewProps> = ({
 
       {/* Withdraw Modal - Now fully wired */}
       <WithdrawModal
+        gasEstimate={gasEstimate}
         isOpen={isWithdrawModalOpen}
         onClose={() => setIsWithdrawModalOpen(false)}
         token={selectedToken}

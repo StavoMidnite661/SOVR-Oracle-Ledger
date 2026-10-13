@@ -927,3 +927,10 @@ update_docs.js
 # Task files
 task.md
 
+
+# Allow critical database schema & deployment scripts
+!database-schema.sql
+!scripts/backup-db.sh
+!scripts/backup-db.bat
+!scripts/
+!scripts/*
