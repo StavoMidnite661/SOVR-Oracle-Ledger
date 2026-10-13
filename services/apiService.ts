@@ -7,7 +7,8 @@ import type {
   PurchaseOrder, 
   Invoice, 
   ConsulCreditsTransaction,
-  ConsulCreditsConfig
+  ConsulCreditsConfig,
+  StripeCustomer
 } from '../types.js';
 
 // Direct Deposit Recipient and Bank Account types
@@ -102,6 +103,13 @@ class ApiService {
   // Vendors
   async getVendors(): Promise<Vendor[]> {
     return this.fetchApi<Vendor[]>('/vendors');
+  }
+
+  async addVendor(vendor: Omit<Vendor, 'id' | 'createdDate'>): Promise<Vendor> {
+    return this.fetchApi<Vendor>('/vendors', {
+      method: 'POST',
+      body: JSON.stringify(vendor),
+    });
   }
 
   async updateVendor(vendor: Vendor): Promise<Vendor> {

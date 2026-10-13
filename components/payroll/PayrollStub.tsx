@@ -19,7 +19,7 @@ const StubRow: React.FC<{ label: string; current: number; ytd: number; isBold?: 
   </tr>
 );
 
-export const PayrollStub: React.FC<PayrollStubProps> = ({ employee, payPeriod, payDate }) => {
+export const PayrollStub: React.FC<PayrollStubProps> = ({ employee, payPeriod, payDate, address, bankRoutingNumber, bankAccountLast4, bankName }) => {
   const annualSalary = employee.annualSalary;
   const monthlyGross = annualSalary / 12;
 

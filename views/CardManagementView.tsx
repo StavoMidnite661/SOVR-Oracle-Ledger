@@ -8,7 +8,8 @@ import {
   ModalTextarea,
   ModalButton, 
   ModalLabel, 
-  ModalSection, 
+  ModalSection,
+  ModalSectionHeader,
   ModalField 
 } from '../components/shared/ModalElements.js';
 

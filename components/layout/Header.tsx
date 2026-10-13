@@ -5,16 +5,21 @@ import { Menu } from 'lucide-react';
 interface HeaderProps {
     currentViewName: string;
     isConsoleOpen: boolean;
+    useMockData?: boolean;
     onMenuToggle?: () => void;
+    onToggleMockData?: () => void;
     onToggleConsole?: () => void;
-    isDemoMode?: boolean; // NEW: For Vercel / fallback indicator
+    isDemoMode?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
   currentViewName, 
   isConsoleOpen,
+  useMockData,
   onMenuToggle, 
-  onToggleConsole
+  onToggleMockData,
+  onToggleConsole,
+  isDemoMode
 }) => {
   return (
     <header className="bg-black/40 backdrop-blur-xl px-3 sm:px-6 py-3 flex justify-between items-center border-b border-white/5 relative z-40">
@@ -61,8 +66,8 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <div className="w-2 h-2 rounded-full bg-sov-green shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
           <span className="text-[9px] font-black text-sov-light-alt uppercase tracking-[0.2em]">Matrix:</span>
-          <span className="text-[10px] font-black uppercase tracking-widest text-sov-green">
-            Live
+          <span className={`text-[10px] font-black uppercase tracking-widest ${useMockData || isDemoMode ? "text-yellow-400" : "text-sov-green"}`}>
+            {useMockData || isDemoMode ? "Demo" : "Live"}
           </span>
         </div>
 

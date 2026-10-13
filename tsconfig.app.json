@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "App.tsx",
+    "index.tsx",
+    "components/**/*",
+    "views/**/*",
+    "contexts/**/*",
+    "services/**/*",
+    "shared/**/*",
+    "constants.ts",
+    "mockData.ts",
+    "types.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "hardhat.config.ts",
+    "services/tigerbeetleService.ts",
+    "services/blockchainService.test.ts",
+    "services/stripeServices.test.ts"
+  ]
+}
