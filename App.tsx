@@ -18,6 +18,7 @@ import { StripeReportsView } from './views/StripeReportsView.js';
 import { PayrollView } from './views/PayrollView.js';
 import { SettingsView } from './views/SettingsView.js';
 import { ISO20022View } from './views/ISO20022View.js';
+import { AutonomousSettlementView } from './views/AutonomousSettlementView.js';
 import { CHART_OF_ACCOUNTS, DEFAULT_SETTINGS, CONSUL_CREDITS_CONFIG, mockJournalEntries, mockPurchaseOrders, mockInvoices, mockEmployees, mockVendors, mockCompanyCards, mockCardTransactions, mockStripeCustomers, mockAchPayments, mockDirectDepositPayouts } from './constants.js';
 import { mockConfig, mockSupportedTokens, mockTransactions, mockStats } from './mockData.js';
 import { loggingService } from './services/loggingService.js';
@@ -898,6 +899,13 @@ const App: React.FC = () => {
       />;
       
       case View.ISO20022: return <ISO20022View achPayments={achPayments} />;
+      case View.AutonomousSettlement: return <AutonomousSettlementView 
+        journalEntries={journalEntries}
+        arInvoices={arInvoices}
+        apInvoices={apInvoices}
+        intercompanyPayableBalance={intercompanyPayableBalance}
+        addJournalEntry={addJournalEntry}
+      />;
       
       case View.Payroll: return <PayrollView 
         employees={employees} 

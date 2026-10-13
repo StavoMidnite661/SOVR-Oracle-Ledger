@@ -8,7 +8,7 @@ import {
     CardManagementIcon, ConsulCreditsIcon, PayrollIcon, SettingsIcon, 
     UserManualIcon, TermsIcon 
 } from '../../components/shared/Icons.js';
-import { X, FileText } from 'lucide-react';
+import { X, FileText, Cpu } from 'lucide-react';
 
 // Stripe icons (inline since not in shared/Icons)
 const StripePaymentsIcon = () => <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>;
@@ -42,6 +42,7 @@ const mainViews = [
     { id: View.StripeCompliance, label: 'Stripe Compliance', icon: <StripeComplianceIcon /> },
     { id: View.StripeReports, label: 'Stripe Reports', icon: <StripeReportsIcon /> },
     { id: View.ISO20022, label: 'ISO 20022', icon: <ISO20022Icon /> },
+    { id: View.AutonomousSettlement, label: 'Autonomous Settlement', icon: <Cpu className="h-5 w-5 text-sov-accent animate-pulse" /> },
     { id: View.Payroll, label: 'Payroll', icon: <PayrollIcon /> },
     { id: View.Settings, label: 'Settings', icon: <SettingsIcon /> },
 ];
